@@ -25,27 +25,25 @@ const App: React.FC = () => {
     setUserType(null);
   };
 
-  let content;
-  let isDashboard = false;
-
-  if (!userType) {
-    content = <SelectionScreen onSelect={handleTypeSelect} />;
-  } else if (!isLoggedIn) {
-    content = <Auth userType={userType} onLoginSuccess={handleLoginSuccess} onBack={handleBackToSelection} />;
-  } else {
-    content = <ProfileDashboard subType={userType} onLogout={handleLogout} />;
-    isDashboard = true;
+  // Render selection or auth screens in a centered, full-screen view
+  if (!userType || !isLoggedIn) {
+    return (
+        <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
+            <div className="w-full h-screen">
+                {!userType ? (
+                    <SelectionScreen onSelect={handleTypeSelect} />
+                ) : (
+                    <Auth userType={userType} onLoginSuccess={handleLoginSuccess} onBack={handleBackToSelection} />
+                )}
+            </div>
+        </div>
+    );
   }
 
-  const containerClasses = isDashboard
-    ? "w-full max-w-sm h-[800px] max-h-[90vh] bg-black rounded-3xl border border-gray-700/50 shadow-2xl shadow-orange-500/10 overflow-hidden flex flex-col"
-    : "w-full h-screen"; // Full screen for selection and auth
-
+  // Render the dashboard in a simple, full-page layout that allows for scrolling
   return (
-    <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center md:p-4">
-      <div className={containerClasses}>
-        {content}
-      </div>
+    <div className="bg-black min-h-screen font-['Inter',_sans-serif]">
+      <ProfileDashboard subType={userType} onLogout={handleLogout} />
     </div>
   );
 };

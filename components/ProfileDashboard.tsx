@@ -1,60 +1,296 @@
-import React, { useCallback } from 'react';
+
+import React, { useCallback, useState } from 'react';
 import { SubType, Partner, Status } from '../types';
 import ProfileForm from './ProfileForm';
+import Button from './Button';
+import Input from './Input';
+import LocationInput from './LocationInput';
+
 
 interface ProfileDashboardProps {
   onLogout: () => void;
   subType: SubType;
 }
 
-// Mock user data for display purposes
-const mockUser = {
+// --- MOCK DATA ---
+
+const mockTherapist = {
   name: "Wayan",
-  rating: 4.92,
   imageUrl: `https://i.pravatar.cc/150?u=wayan`,
+  location: 'Denpasar, Bali, Indonesia',
   stats: {
-    status: Status.Online,
+    status: Status.Offline,
     acceptance: '95%',
     completion: '99%',
   }
 };
 
-const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, subType }) => {
+const mockPlace = {
+    name: "Ubud Wellness Spa",
+    imageUrl: 'https://i.pravatar.cc/150?u=ubudspa',
+    location: 'Jl. Monkey Forest, Ubud, Bali',
+    stats: {
+        status: Status.Online, 
+        acceptance: '98%',
+        completion: '100%',
+    },
+    openingHours: "10:00 AM - 9:00 PM"
+};
 
-  const handleSaveProfile = useCallback((data: Partner) => {
-    console.log('Saving profile data to Supabase:', data);
-    alert('Profile saved! Check the console for the data structure.');
-  }, []);
+type MockUser = typeof mockTherapist | typeof mockPlace;
 
-  // The "back" action from the form will now trigger a full logout.
-  const handleBack = () => {
-    onLogout();
-  };
-  
+const mockStats = {
+  today: 7,
+  week: 34,
+  total: 489,
+};
+
+
+// --- REUSABLE & VIEW COMPONENTS ---
+
+const DashboardSection: React.FC<{ title: string, children: React.ReactNode }> = ({ title, children }) => (
+    <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-700/80 p-6 rounded-2xl shadow-lg">
+        <h2 className="text-lg font-bold text-white mb-6 pb-4 border-b border-gray-700">{title}</h2>
+        <div className="space-y-4">
+            {children}
+        </div>
+    </div>
+);
+
+const LocationManager: React.FC<{ lastLocation: string; onLocationSet: (location: string) => void; }> = ({ lastLocation, onLocationSet }) => {
+    const [currentLocation, setCurrentLocation] = useState(lastLocation);
+
+    const handleConfirmLocation = () => {
+        if (currentLocation) {
+            onLocationSet(currentLocation);
+        } else {
+            alert('Please set a location before continuing.');
+        }
+    };
+    
+    return (
+        <DashboardSection title="Set Your Location">
+            <p className="text-sm text-slate-400 -mt-2 mb-6">You must set your current location to go online. This will be visible to customers until you go offline.</p>
+            <LocationInput 
+                label="Current Location"
+                onLocationSelect={setCurrentLocation}
+                initialValue={currentLocation}
+            />
+            <p className="text-xs text-slate-500 mt-2">Last set location: {lastLocation || 'Not set'}</p>
+        </DashboardSection>
+    );
+};
+
+const TherapistStatusControl: React.FC<{ user: MockUser; onStatusChange: (newStatus: Status) => void; onLocationUpdate: (location: string) => void }> = ({ user, onStatusChange, onLocationUpdate }) => {
+    const isOnline = user.stats.status === Status.Online;
+    const [location, setLocation] = useState(user.location);
+    
+    const statusIndicatorColor = () => {
+        switch(user.stats.status) {
+            case Status.Online: return 'bg-green-400';
+            case Status.Busy: return 'bg-yellow-400';
+            case Status.Offline: return 'bg-slate-500';
+            default: return 'bg-slate-500';
+        }
+    };
+
+    const handleGoOnline = () => {
+        if (location) {
+            onLocationUpdate(location);
+            onStatusChange(Status.Online);
+        } else {
+            alert("Please set your location before going online.");
+        }
+    };
+
+    if (!isOnline && user.stats.status === Status.Offline) {
+        return (
+            <div className="space-y-8">
+                <LocationManager lastLocation={user.location} onLocationSet={setLocation} />
+                <div className="p-4">
+                    <Button onClick={handleGoOnline} fullWidth>
+                        Set Location & Go Online
+                    </Button>
+                </div>
+            </div>
+        )
+    }
+
+    return (
+        <DashboardSection title="Your Status">
+            <p className="text-sm text-slate-400 -mt-2 mb-6">
+                Your location is currently set to: <span className="font-semibold text-slate-300">{user.location}</span>
+            </p>
+            <div className="flex justify-center items-center gap-2 text-center bg-gray-800/80 p-4 rounded-lg">
+                <span className={`w-3 h-3 rounded-full ${statusIndicatorColor()} ${user.stats.status === Status.Online ? 'animate-pulse' : ''}`}></span>
+                <p className="font-semibold">Current Status: <span className="text-orange-500 capitalize">{user.stats.status}</span></p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+                <Button onClick={() => onStatusChange(Status.Offline)}>
+                    Go Offline
+                </Button>
+                <Button onClick={() => onStatusChange(user.stats.status === Status.Busy ? Status.Online : Status.Busy)} variant="secondary">
+                    {user.stats.status === Status.Busy ? 'Set to Online' : 'Set to Busy'}
+                </Button>
+            </div>
+        </DashboardSection>
+    );
+};
+
+
+const PlaceStatusView: React.FC<{ status: Status; openingHours: string; }> = ({ status, openingHours }) => (
+     <DashboardSection title="Business Status">
+        <p className="text-sm text-slate-400 -mt-2 mb-6">
+            Your status is 'Open' during operating hours. Booked dates from your history will automatically set your status to 'Busy'.
+        </p>
+        <div className="text-center p-6 bg-gray-800/80 rounded-lg">
+            <div className="flex justify-center items-center gap-3">
+                <span className={`w-4 h-4 rounded-full ${status === Status.Online ? 'bg-green-400' : 'bg-red-500'}`}></span>
+                <p className="text-2xl font-bold">Currently: <span className="text-orange-500 capitalize">{status === Status.Online ? 'Open' : 'Closed'}</span></p>
+            </div>
+            <p className="text-slate-400 mt-3">Operating Hours: {openingHours}</p>
+        </div>
+    </DashboardSection>
+);
+
+const BookingHistory: React.FC<{ bookedDates: string[]; setBookedDates: (dates: string[]) => void; }> = ({ bookedDates, setBookedDates }) => {
+    const [newDate, setNewDate] = useState('');
+
+    const addDate = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newDate && !bookedDates.includes(newDate)) {
+            setBookedDates([...bookedDates, newDate].sort());
+            setNewDate('');
+        }
+    };
+
+    const removeDate = (dateToRemove: string) => {
+        setBookedDates(bookedDates.filter(date => date !== dateToRemove));
+    };
+
+    return (
+        <DashboardSection title="Booking History & Availability">
+            <p className="text-sm text-slate-400 -mt-2 mb-6">
+                Add dates you are fully booked. This will set your status to 'Busy' for those days on your public profile, preventing overbooking.
+            </p>
+            <form onSubmit={addDate} className="flex flex-col sm:flex-row gap-2">
+                <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required noLabel className="flex-grow"/>
+                <Button type="submit" className="w-full sm:w-auto">Add Booked Date</Button>
+            </form>
+            <div className="mt-6 space-y-3">
+                <h3 className="text-md font-semibold text-slate-200">Your Booked Dates</h3>
+                {bookedDates.length > 0 ? (
+                    bookedDates.map(date => (
+                        <div key={date} className="flex justify-between items-center p-3 bg-gray-800/80 rounded-lg animate-fade-in">
+                            <span className="font-mono text-slate-300">{date}</span>
+                            <button type="button" onClick={() => removeDate(date)} className="p-2 text-slate-400 hover:text-red-500 rounded-full hover:bg-red-500/10 transition-colors">
+                                <TrashIcon/>
+                            </button>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-slate-500 text-center py-4">No booked dates added yet.</p>
+                )}
+            </div>
+        </DashboardSection>
+    );
+};
+
+
+const Earnings: React.FC = () => {
+  const StatCard: React.FC<{ value: number; label: string }> = ({ value, label }) => (
+    <div className="bg-gray-800/80 p-4 rounded-lg text-center">
+        <p className="text-4xl font-bold text-orange-500">{value}</p>
+        <p className="text-xs text-slate-400 uppercase tracking-wider mt-1">{label}</p>
+    </div>
+  );
+
   return (
-    <div className="flex-1 flex flex-col bg-black h-full">
-      <ProfileHeader user={mockUser} />
-      <main className="flex-1 overflow-y-auto p-4">
-          <ProfileForm
-              subType={subType}
-              onSave={handleSaveProfile}
-              onBack={handleBack}
-          />
-      </main>
-       <BottomNav onLogout={onLogout} />
+    <div className="space-y-8">
+      <DashboardSection title="WhatsApp Contact Analytics">
+          <p className="text-sm text-slate-400 -mt-2 mb-6">
+              Track how many times users have accessed your WhatsApp contact information. This app does not handle payments or bookings.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <StatCard value={mockStats.today} label="Today's Clicks" />
+              <StatCard value={mockStats.week} label="This Week's Clicks" />
+              <StatCard value={mockStats.total} label="Total Clicks" />
+          </div>
+      </DashboardSection>
+       <DashboardSection title="How it Works">
+          <p className="text-sm text-slate-400 leading-relaxed">
+            When a customer is interested in your service, they tap a button to reveal your WhatsApp number. Each tap is counted here.
+            <br/><br/>
+            We recommend following up promptly to secure the booking. This page gives you an idea of the interest your profile is generating.
+          </p>
+      </DashboardSection>
     </div>
   );
 };
 
-const ProfileHeader: React.FC<{ user: typeof mockUser }> = ({ user }) => (
+// --- Main Dashboard Component ---
+
+type ActiveView = 'home' | 'earnings' | 'history' | 'profile';
+
+const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, subType }) => {
+  const [activeView, setActiveView] = useState<ActiveView>('home');
+  const [user, setUser] = useState<MockUser>(subType === SubType.HomeService ? mockTherapist : mockPlace);
+  const [bookedDates, setBookedDates] = useState<string[]>(['2024-12-24', '2024-12-25', '2024-12-31']);
+
+  const handleStatusChange = (newStatus: Status) => {
+    setUser(prevUser => ({
+        ...prevUser,
+        stats: { ...prevUser.stats, status: newStatus },
+    }));
+  };
+  
+  const handleLocationUpdate = (newLocation: string) => {
+      setUser(prevUser => ({ ...prevUser, location: newLocation }));
+  };
+
+  const handleSaveProfile = useCallback((data: Partner) => {
+    console.log('Saving profile data to Supabase:', data);
+    setUser(prev => ({...prev, name: data.name, imageUrl: data.image_url, location: data.location}));
+    alert('Profile saved! Check the console for the data structure.');
+  }, []);
+
+  const handleBack = () => {
+    onLogout();
+  };
+  
+  const renderContent = () => {
+    switch(activeView) {
+      case 'home':
+        return subType === SubType.HomeService 
+          ? <TherapistStatusControl user={user} onStatusChange={handleStatusChange} onLocationUpdate={handleLocationUpdate}/>
+          : <PlaceStatusView status={user.stats.status} openingHours={(user as typeof mockPlace).openingHours} />;
+      case 'profile':
+        return <ProfileForm subType={subType} onSave={handleSaveProfile} onBack={handleBack} />;
+      case 'earnings':
+        return <Earnings />;
+      case 'history':
+        return <BookingHistory bookedDates={bookedDates} setBookedDates={setBookedDates} />;
+      default:
+        return <ProfileForm subType={subType} onSave={handleSaveProfile} onBack={handleBack} />;
+    }
+  };
+
+  return (
+    <div className="flex flex-col min-h-screen bg-black">
+      <ProfileHeader user={user} />
+      <main className="p-4 pb-28">
+          {renderContent()}
+      </main>
+       <BottomNav activeView={activeView} setActiveView={setActiveView} onLogout={onLogout} />
+    </div>
+  );
+};
+
+const ProfileHeader: React.FC<{ user: MockUser }> = ({ user }) => (
     <header className="flex flex-col items-center p-6 text-center">
         <img src={user.imageUrl} alt="Profile" className="w-24 h-24 rounded-full border-4 border-gray-800 ring-2 ring-orange-500" />
         <h1 className="text-2xl font-bold text-white mt-4">{user.name}</h1>
-        <div className="flex items-center gap-1 text-yellow-400 mt-1">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10.868 2.884c.321-.772 1.415-.772 1.736 0l1.83 4.401 4.753.393c.849.07 1.205 1.103.58 1.668l-3.53 3.034 1.034 4.636c.21 1.028-.766 1.833-1.684 1.33l-4.158-2.433-4.158 2.433c-.918.503-1.894-.302-1.684-1.33l1.034-4.636-3.53-3.034c-.625-.565-.269-1.598.58-1.668l4.753-.393 1.83-4.401Z" clipRule="evenodd" /></svg>
-            <span className="font-semibold text-lg">{user.rating} Rating</span>
-        </div>
-        <div className="mt-6 w-full bg-gray-900/50 backdrop-blur-xl border border-gray-700/80 rounded-2xl p-4 flex justify-around">
+        <div className="mt-6 w-full max-w-md mx-auto bg-gray-900/50 backdrop-blur-xl border border-gray-700/80 rounded-2xl p-4 flex justify-around">
             <StatItem value={user.stats.status} label="Status" />
             <StatItem value={user.stats.acceptance} label="Acceptance" />
             <StatItem value={user.stats.completion} label="Completion" />
@@ -69,13 +305,22 @@ const StatItem: React.FC<{ value: string; label: string }> = ({ value, label }) 
     </div>
 );
 
-const BottomNav: React.FC<{ onLogout: () => void }> = ({ onLogout }) => (
-    <footer className="w-full bg-gray-900/80 backdrop-blur-xl border-t border-gray-700/80">
-        <div className="flex justify-around items-center h-20">
-            <NavItem icon={<HomeIcon />} label="Home" />
-            <NavItem icon={<ChartBarIcon />} label="Earnings" />
-            <NavItem icon={<ClockIcon />} label="History" />
-            <NavItem icon={<UserCircleIcon />} label="Profile" active />
+
+// --- Navigation Components ---
+
+interface BottomNavProps {
+    onLogout: () => void;
+    activeView: ActiveView;
+    setActiveView: (view: ActiveView) => void;
+}
+
+const BottomNav: React.FC<BottomNavProps> = ({ onLogout, activeView, setActiveView }) => (
+    <footer className="fixed bottom-0 left-0 right-0 w-full bg-gray-900/80 backdrop-blur-xl border-t border-gray-700/80 z-50">
+        <div className="flex justify-around items-center h-20 max-w-3xl mx-auto">
+            <NavItem icon={<HomeIcon />} label="Home" view="home" activeView={activeView} onClick={setActiveView} />
+            <NavItem icon={<ChartBarIcon />} label="Earnings" view="earnings" activeView={activeView} onClick={setActiveView} />
+            <NavItem icon={<ClockIcon />} label="History" view="history" activeView={activeView} onClick={setActiveView} />
+            <NavItem icon={<UserCircleIcon />} label="Profile" view="profile" activeView={activeView} onClick={setActiveView} />
              <button onClick={onLogout} className="flex flex-col items-center text-slate-400 hover:text-orange-500 transition-colors">
                 <LogoutIcon />
                 <span className="text-xs mt-1">Logout</span>
@@ -84,18 +329,28 @@ const BottomNav: React.FC<{ onLogout: () => void }> = ({ onLogout }) => (
     </footer>
 );
 
-const NavItem: React.FC<{ icon: React.ReactNode; label: string; active?: boolean }> = ({ icon, label, active }) => (
-    <a href="#" className={`flex flex-col items-center transition-colors ${active ? 'text-orange-500' : 'text-slate-400 hover:text-orange-500'}`}>
+interface NavItemProps {
+    icon: React.ReactNode;
+    label: string;
+    view: ActiveView;
+    activeView: ActiveView;
+    onClick: (view: ActiveView) => void;
+}
+
+const NavItem: React.FC<NavItemProps> = ({ icon, label, view, activeView, onClick }) => (
+    <button onClick={() => onClick(view)} className={`flex flex-col items-center transition-colors ${activeView === view ? 'text-orange-500' : 'text-slate-400 hover:text-orange-500'}`}>
         {icon}
         <span className="text-xs mt-1">{label}</span>
-    </a>
+    </button>
 );
 
-// Icons
+
+// --- ICONS ---
 const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M11.47 3.841a.75.75 0 0 1 1.06 0l8.69 8.69a.75.75 0 1 0 1.06-1.06l-8.689-8.69a2.25 2.25 0 0 0-3.182 0l-8.69 8.69a.75.75 0 1 0 1.061 1.06l8.69-8.69Z" /><path d="m12 5.432 8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 0 1-.75-.75v-4.5a.75.75 0 0 0-.75-.75h-3a.75.75 0 0 0-.75.75V21a.75.75 0 0 1-.75.75H5.625a1.875 1.875 0 0 1-1.875-1.875v-6.198a2.29 2.29 0 0 0 .091-.086L12 5.432Z" /></svg>;
 const ChartBarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.035-.84-1.875-1.875-1.875h-.75Z" /><path d="M9.75 8.625c-1.035 0-1.875.84-1.875 1.875v11.25c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V10.5c0-1.035-.84-1.875-1.875-1.875h-.75Z" /><path d="M3 13.125c-1.035 0-1.875.84-1.875 1.875v6.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875v-6.75c0-1.035-.84-1.875-1.875-1.875H3Z" /></svg>;
 const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 0 0 0-1.5h-3.75V6Z" clipRule="evenodd" /></svg>;
 const UserCircleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M18.685 19.097A9.723 9.723 0 0 0 21.75 12c0-5.385-4.365-9.75-9.75-9.75S2.25 6.615 2.25 12a9.723 9.723 0 0 0 3.065 7.097A9.716 9.716 0 0 0 12 21.75a9.716 9.716 0 0 0 6.685-2.653Zm-12.54-1.285A7.486 7.486 0 0 1 12 15a7.486 7.486 0 0 1 5.855 2.812A8.224 8.224 0 0 1 12 20.25a8.224 8.224 0 0 1-5.855-2.438ZM15.75 9a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" clipRule="evenodd" /></svg>;
 const LogoutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>;
+const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.134-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.067-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>;
 
 export default ProfileDashboard;

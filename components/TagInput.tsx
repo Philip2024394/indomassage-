@@ -28,7 +28,7 @@ const TagInput: React.FC<TagInputProps> = ({ label, tags, onTagsChange, placehol
   return (
     <div>
       <label className="block text-sm font-medium text-slate-300 mb-1">{label}</label>
-      <div className="flex flex-wrap items-center gap-2 p-2 bg-gray-800 border border-gray-700 text-slate-100 rounded-md shadow-sm transition-shadow focus-within:ring-1 focus-within:ring-orange-500 focus-within:border-orange-500">
+      <div className="flex flex-wrap items-center gap-2 p-2 bg-black/30 backdrop-blur-sm border border-white/20 text-slate-100 rounded-md shadow-sm transition-all focus-within:ring-1 focus-within:ring-orange-500 focus-within:border-orange-500">
         {tags.map((tag, index) => (
           <div key={index} className="flex items-center gap-1 bg-orange-500/20 text-orange-300 text-sm font-medium px-2 py-1 rounded-full">
             {tag}
@@ -43,7 +43,7 @@ const TagInput: React.FC<TagInputProps> = ({ label, tags, onTagsChange, placehol
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="flex-grow bg-transparent focus:outline-none p-1 text-slate-100 placeholder:text-gray-500"
+          className="flex-grow bg-transparent focus:outline-none p-1 text-slate-100 placeholder:text-slate-400"
         />
       </div>
        <p className="text-xs text-slate-500 mt-1">Press Enter or comma to add a tag.</p>

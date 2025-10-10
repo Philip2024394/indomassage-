@@ -24,9 +24,8 @@ interface BasePartner {
   name: string;
   type: 'massage';
   sub_type: SubType;
-  address: string;
+  location: string;
   status: Status;
-  rating: number;
   image_url: string;
   header_image_url: string;
   whatsapp: string;
@@ -37,12 +36,12 @@ interface BasePartner {
 
 export interface HomeServicePartner extends BasePartner {
   sub_type: SubType.HomeService;
-  street: 'Home Service';
+  years_of_experience?: number;
+  id_card_image_url?: string;
 }
 
 export interface PlacePartner extends BasePartner {
   sub_type: SubType.Place;
-  street: string;
   opening_hours?: string;
   other_services?: string[];
   photos?: Photo[];
