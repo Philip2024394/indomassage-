@@ -276,9 +276,9 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, subType }
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-black">
+    <div className="flex flex-col h-screen bg-black overflow-hidden">
       <ProfileHeader user={user} />
-      <main className="p-4 pb-28">
+      <main id="main-content" className="flex-grow overflow-y-auto p-4 pb-28">
           {renderContent()}
       </main>
        <BottomNav activeView={activeView} setActiveView={setActiveView} onLogout={onLogout} />

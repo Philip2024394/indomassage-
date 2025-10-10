@@ -37,6 +37,14 @@
   input[type=number] {
     -moz-appearance: textfield; /* Firefox */
   }
+  /* Hide scrollbar for main content area */
+  #main-content::-webkit-scrollbar {
+    display: none;
+  }
+  #main-content {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
 </style>
 </head>
   <body class="bg-black text-slate-100">
