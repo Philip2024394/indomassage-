@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import ProfileDashboard from './components/ProfileDashboard';
-import SelectionScreen from './components/SelectionScreen';
 import { SubType, Partner } from './types';
 
 // Extend the Window interface to include our global API key for TypeScript
@@ -80,7 +79,6 @@ const ConnectionError: React.FC<{ message: string; onRetry: () => void; }> = ({ 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Partner | null>(null);
-  const [userType, setUserType] = useState<SubType | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
@@ -142,25 +140,15 @@ const App: React.FC = () => {
             setConnectionError("Could not load your profile. Please check your internet connection.");
         } else if (data) {
             setProfile(data as Partner);
-            setUserType(data.sub_type);
         }
         setLoading(false);
       } else {
         setProfile(null);
-        setUserType(null);
       }
     };
     fetchProfile();
   }, [session]);
 
-  const handleTypeSelect = (type: SubType) => {
-    setUserType(type);
-  };
-  
-  const handleBackToSelection = () => {
-    setUserType(null);
-  };
-  
   const handleLogout = async () => {
     if (!supabase) return;
     setLoading(true);
@@ -195,11 +183,7 @@ const App: React.FC = () => {
     return (
         <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
             <div className="w-full h-screen">
-                {!userType ? (
-                    <SelectionScreen onSelect={handleTypeSelect} />
-                ) : (
-                    <Auth userType={userType} onBack={handleBackToSelection} supabase={supabase} />
-                )}
+                <Auth userType={SubType.HomeService} supabase={supabase} />
             </div>
         </div>
     );

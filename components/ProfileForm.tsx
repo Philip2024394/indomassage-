@@ -1,8 +1,8 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { SubType, Status, Partner, Price, Photo, PlacePartner, HomeServicePartner } from '../types';
+import { SubType, Status, Partner, Price, HomeServicePartner } from '../types';
 import Input from './Input';
 import Button from './Button';
-import TagInput from './TagInput';
 import LocationInput from './LocationInput';
 
 
@@ -126,9 +126,10 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ label, option
 const MASSAGE_TYPES_OPTIONS = ["Balinese Massage", "Deep Tissue", "Reflexology", "Aromatherapy", "Hot Stone", "Shiatsu", "Thai Massage", "Swedish Massage"];
 
 export const initialFormData = (subType: SubType): Partial<Partner> => {
-    const commonData = {
+    return {
         name: '',
         type: 'massage' as const,
+        sub_type: SubType.HomeService,
         location: '',
         status: Status.Offline,
         image_url: '',
@@ -140,30 +141,9 @@ export const initialFormData = (subType: SubType): Partial<Partner> => {
             { duration: 90, price: 0 },
             { duration: 120, price: 0 },
         ],
+        years_of_experience: 0,
+        id_card_image_url: '',
     };
-
-    if (subType === SubType.HomeService) {
-        return {
-            ...commonData,
-            sub_type: SubType.HomeService,
-            // header_image_url is now set on creation in Auth.tsx
-            years_of_experience: 0,
-            id_card_image_url: '',
-        };
-    } else {
-        return {
-            ...commonData,
-            header_image_url: `https://picsum.photos/seed/${Math.random()}/800/400`,
-            image_url: `https://picsum.photos/seed/${Math.random()}/400/400`,
-            sub_type: SubType.Place,
-            opening_hours: '',
-            other_services: [],
-            photos: Array.from({ length: 4 }).map((_, i) => ({
-                url: '',
-                name: `Image ${i + 1}`,
-            })),
-        };
-    }
 };
 
 
@@ -203,18 +183,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
     reader.readAsDataURL(file);
   }, []);
 
-  const handleGalleryImageChange = useCallback((index: number, file: File) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-        const photos = [...((formData as PlacePartner).photos || [])];
-        if (photos[index]) {
-            photos[index].url = reader.result as string;
-            setFormData(prev => ({...prev, photos }));
-        }
-    };
-    reader.readAsDataURL(file);
-  }, [formData]);
-
   const handleLocationChange = useCallback((newLocation: string) => {
     setFormData(prev => ({ ...prev, location: newLocation }));
   }, []);
@@ -233,8 +201,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
       onBack(); // Go back to home after saving
   };
   
-  const isTherapist = profile.sub_type === SubType.HomeService;
-  
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
         <button type="button" onClick={onBack} className="text-sm text-orange-500 hover:underline mb-4 flex items-center gap-2">
@@ -242,26 +208,22 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
             Back to Dashboard
         </button>
 
-        <FormSection title={isTherapist ? "Therapist Information" : "Business Information"}>
-            <Input name="name" label={isTherapist ? "Full Name" : "Business Name"} value={formData.name} onChange={handleChange} required/>
-            {isTherapist && (
-                <ImageUpload 
-                    label="Profile Picture" 
-                    value={(formData as HomeServicePartner).image_url || ''} 
-                    onImageChange={(file) => handleImageChange('image_url', file)} 
-                    helpText="Upload a clear headshot."
-                />
-            )}
-            {isTherapist && (
-                <ImageUpload 
-                    label="Indonesian ID Card (KTP)" 
-                    value={(formData as HomeServicePartner).id_card_image_url || ''}
-                    onImageChange={(file) => handleImageChange('id_card_image_url', file)} 
-                    helpText="This is for verification and is not public."
-                />
-            )}
+        <FormSection title="Therapist Information">
+            <Input name="name" label="Full Name" value={formData.name} onChange={handleChange} required/>
+            <ImageUpload 
+                label="Profile Picture" 
+                value={(formData as HomeServicePartner).image_url || ''} 
+                onImageChange={(file) => handleImageChange('image_url', file)} 
+                helpText="Upload a clear headshot."
+            />
+            <ImageUpload 
+                label="Indonesian ID Card (KTP)" 
+                value={(formData as HomeServicePartner).id_card_image_url || ''}
+                onImageChange={(file) => handleImageChange('id_card_image_url', file)} 
+                helpText="This is for verification and is not public."
+            />
             <LocationInput 
-                label={isTherapist ? "Primary Operating Area" : "Business Location"}
+                label="Primary Operating Area"
                 onLocationSelect={handleLocationChange}
                 initialValue={formData.location}
             />
@@ -272,7 +234,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
                     <Input id="whatsapp" name="whatsapp" type="tel" value={formData.whatsapp} onChange={handleChange} required noLabel className="rounded-l-none"/>
                 </div>
             </div>
-            {isTherapist && <Input name="years_of_experience" label="Years of Experience" type="number" value={(formData as HomeServicePartner).years_of_experience || ''} onChange={handleChange} required/>}
+            <Input name="years_of_experience" label="Years of Experience" type="number" value={(formData as HomeServicePartner).years_of_experience || ''} onChange={handleChange} required/>
             <div>
               <label htmlFor="bio" className="block text-sm font-medium text-slate-300 mb-1">Bio / Description</label>
               <textarea name="bio" id="bio" rows={4} value={formData.bio} onChange={handleChange} maxLength={250} className="w-full px-3 py-2 bg-black/30 backdrop-blur-sm border border-white/20 text-slate-100 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all placeholder:text-slate-400" required></textarea>
@@ -281,21 +243,12 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
         </FormSection>
 
         <FormSection title="Services & Pricing">
-            {isTherapist ? (
-                <MultiSelectDropdown 
-                    label="Massage Types Offered"
-                    options={MASSAGE_TYPES_OPTIONS}
-                    selectedOptions={formData.massage_types || []}
-                    onSelectionChange={(selection) => setFormData(p => ({...p, massage_types: selection}))}
-                />
-            ) : (
-                 <TagInput 
-                    label="Massage Types" 
-                    tags={formData.massage_types || []} 
-                    onTagsChange={(tags) => setFormData(p => ({...p, massage_types: tags}))} 
-                    placeholder="e.g., Balinese, Deep Tissue"
-                 />
-            )}
+            <MultiSelectDropdown 
+                label="Massage Types Offered"
+                options={MASSAGE_TYPES_OPTIONS}
+                selectedOptions={formData.massage_types || []}
+                onSelectionChange={(selection) => setFormData(p => ({...p, massage_types: selection}))}
+            />
              <h3 className="text-md font-semibold text-slate-200 pt-4">Prices</h3>
              <p className="text-xs text-slate-500 -mt-1 mb-3">Set your prices in thousands of Rupiah (e.g., enter 150 for Rp 150k).</p>
              <div className="space-y-3">
@@ -314,32 +267,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
                 ))}
              </div>
         </FormSection>
-
-        {formData.sub_type === SubType.Place && (
-             <FormSection title="Business Details">
-                 <Input name="opening_hours" label="Opening Hours" value={(formData as PlacePartner).opening_hours} onChange={handleChange} />
-                 <TagInput 
-                    label="Other Services" 
-                    tags={(formData as PlacePartner).other_services || []} 
-                    onTagsChange={(tags) => setFormData(p => ({...p, other_services: tags}))} 
-                    placeholder="e.g., Sauna, Jacuzzi"
-                 />
-                 <h3 className="text-md font-semibold text-slate-200 pt-4">Photo Gallery</h3>
-                 <p className="text-xs text-slate-500 -mt-1 mb-3">Upload up to 4 images for your business gallery.</p>
-                 <div className="grid grid-cols-2 gap-4">
-                    {(formData as PlacePartner).photos?.map((photo, index) => (
-                        <div key={index}>
-                             <label className="block text-sm font-medium text-slate-300 mb-2">{photo.name}</label>
-                             <ImageUpload 
-                                label=""
-                                value={photo.url} 
-                                onImageChange={(file) => handleGalleryImageChange(index, file)}
-                             />
-                        </div>
-                    ))}
-                 </div>
-             </FormSection>
-        )}
         
         <div className="pt-2 pb-12 space-y-6">
             <Checkbox id="terms" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)}>

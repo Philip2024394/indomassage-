@@ -1,3 +1,4 @@
+
 import React, { useCallback, useState } from 'react';
 import { SubType, Partner, Status } from '../types';
 import ProfileForm from './ProfileForm';
@@ -102,35 +103,6 @@ const TherapistStatusControl: React.FC<{ profile: Partner; onProfileUpdate: (upd
     );
 };
 
-
-const PlaceStatusView: React.FC<{ profile: Partner; onProfileUpdate: (updates: Partial<Partner>) => void; }> = ({ profile, onProfileUpdate }) => {
-    const isOpen = profile.status === Status.Online;
-
-    const handleToggleStatus = () => {
-        const newStatus = isOpen ? Status.Offline : Status.Online;
-        onProfileUpdate({ status: newStatus });
-    };
-
-    return (
-         <DashboardSection title="Business Status">
-            <p className="text-sm text-slate-400 -mt-2 mb-6">
-                Your status is 'Open' during operating hours. You can manually override this below. Booked dates from your history will automatically set your status to 'Busy'.
-            </p>
-            <div className="text-center p-6 bg-gray-800/80 rounded-lg">
-                <div className="flex justify-center items-center gap-3">
-                    <span className={`w-4 h-4 rounded-full ${isOpen ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`}></span>
-                    <p className="text-2xl font-bold">Currently: <span className="text-orange-500 capitalize">{isOpen ? 'Open' : 'Closed'}</span></p>
-                </div>
-                <p className="text-slate-400 mt-3">Operating Hours: {(profile as any).opening_hours || 'Not set'}</p>
-            </div>
-            <div className="mt-6">
-                <Button onClick={handleToggleStatus} variant={isOpen ? 'danger' : 'secondary'} fullWidth>
-                    {isOpen ? 'Set Manually to Closed' : 'Set Manually to Open'}
-                </Button>
-            </div>
-        </DashboardSection>
-    );
-};
 
 const BookingHistory: React.FC<{ bookedDates: string[]; setBookedDates: (dates: string[]) => void; }> = ({ bookedDates, setBookedDates }) => {
     const [newDate, setNewDate] = useState('');
@@ -239,9 +211,7 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: 
   const renderContent = () => {
     switch(activeView) {
       case 'home':
-        return profile.sub_type === SubType.HomeService 
-          ? <TherapistStatusControl profile={profile} onProfileUpdate={handleProfileUpdate} />
-          : <PlaceStatusView profile={profile} onProfileUpdate={handleProfileUpdate} />;
+        return <TherapistStatusControl profile={profile} onProfileUpdate={handleProfileUpdate} />
       case 'profile':
         return <ProfileForm profile={profile} onSave={handleProfileUpdate} onBack={handleBackToHome} />;
       case 'earnings':

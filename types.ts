@@ -1,6 +1,7 @@
 
 export enum SubType {
   HomeService = 'home_service',
+  // FIX: Add 'Place' to the SubType enum to resolve reference error in SelectionScreen.tsx
   Place = 'place',
 }
 
@@ -13,11 +14,6 @@ export enum Status {
 export interface Price {
   duration: number;
   price: number;
-}
-
-export interface Photo {
-  url: string;
-  name: string;
 }
 
 interface BasePartner {
@@ -42,11 +38,4 @@ export interface HomeServicePartner extends BasePartner {
   id_card_image_url?: string;
 }
 
-export interface PlacePartner extends BasePartner {
-  sub_type: SubType.Place;
-  opening_hours?: string;
-  other_services?: string[];
-  photos?: Photo[];
-}
-
-export type Partner = HomeServicePartner | PlacePartner;
+export type Partner = HomeServicePartner;
