@@ -21,6 +21,8 @@ export interface Photo {
 }
 
 interface BasePartner {
+  id?: string;
+  user_id?: string;
   name: string;
   type: 'massage';
   sub_type: SubType;

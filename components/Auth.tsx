@@ -2,21 +2,70 @@ import React, { useState } from 'react';
 import Button from './Button';
 import Input from './Input';
 import { SubType } from '../types';
+import { initialFormData } from './ProfileForm';
 
 interface AuthProps {
-  onLoginSuccess: () => void;
   userType: SubType;
   onBack: () => void;
+  supabase: any;
 }
 
-const Auth: React.FC<AuthProps> = ({ onLoginSuccess, userType, onBack }) => {
+const Auth: React.FC<AuthProps> = ({ userType, onBack, supabase }) => {
   const [isLoginView, setIsLoginView] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real app, you would handle API calls to Supabase here.
-    // For this demo, we'll just simulate a successful login/signup.
-    onLoginSuccess();
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+
+    if (!isLoginView) {
+      // Sign Up
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.");
+        setLoading(false);
+        return;
+      }
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (signUpError) {
+        setError(signUpError.message);
+      } else if (data.user) {
+        // Create a profile entry
+        const profileData = {
+            ...initialFormData(userType),
+            user_id: data.user.id,
+            name: 'New Member', // Default name
+        };
+        const { error: profileError } = await supabase.from('profiles').insert(profileData);
+        if (profileError) {
+            setError(`Account created, but failed to create profile: ${profileError.message}`);
+        } else {
+             setMessage('Account created! Please check your email to verify your account, then sign in.');
+             setIsLoginView(true); // Switch to login view after successful signup info
+        }
+      }
+    } else {
+      // Sign In
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        setError(signInError.message);
+      }
+      // onAuthStateChange in App.tsx will handle successful login
+    }
+    setLoading(false);
   };
   
   const typeName = userType === SubType.HomeService ? 'Therapist' : 'Business';
@@ -42,37 +91,30 @@ const Auth: React.FC<AuthProps> = ({ onLoginSuccess, userType, onBack }) => {
         </div>
       
         <div className="w-full max-w-md bg-gray-900/50 backdrop-blur-xl border border-gray-700/80 rounded-2xl p-8">
-          <form onSubmit={handleSubmit} className="w-full space-y-6">
+          <form onSubmit={handleAuthAction} className="w-full space-y-6">
             <h2 className="text-2xl font-semibold text-center text-white">
               {isLoginView ? `${typeName} Sign In` : `Create ${typeName} Account`}
             </h2>
+            {error && <p className="text-red-400 text-sm text-center bg-red-500/10 p-3 rounded-md">{error}</p>}
+            {message && <p className="text-green-400 text-sm text-center bg-green-500/10 p-3 rounded-md">{message}</p>}
             <div className="space-y-4">
-              <Input id="email" type="email" placeholder="Email Address" required />
-              <Input id="password" type="password" placeholder="Password" required />
+              <Input id="email" type="email" placeholder="Email Address" required value={email} onChange={e => setEmail(e.target.value)} />
+              <Input id="password" type="password" placeholder="Password" required value={password} onChange={e => setPassword(e.target.value)} />
               {!isLoginView && (
-                <Input id="confirm-password" type="password" placeholder="Confirm Password" required />
+                <Input id="confirm-password" type="password" placeholder="Confirm Password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
               )}
             </div>
-            <Button type="submit" fullWidth>
-              {isLoginView ? 'Sign In' : 'Create Account'}
+            <Button type="submit" fullWidth disabled={loading}>
+              {loading ? 'Processing...' : (isLoginView ? 'Sign In' : 'Create Account')}
             </Button>
           </form>
 
           <div className="mt-6 text-center">
             <button
-              onClick={() => setIsLoginView(!isLoginView)}
+              onClick={() => { setIsLoginView(!isLoginView); setError(null); setMessage(null); }}
               className="text-sm text-orange-500 hover:text-orange-400 font-medium transition"
             >
               {isLoginView ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}
-            </button>
-          </div>
-          
-          <div className="mt-4 text-center">
-            <button
-              onClick={onLoginSuccess}
-              className="text-xs text-slate-500 hover:text-orange-400 font-medium transition"
-            >
-              Continue as Admin
             </button>
           </div>
         </div>

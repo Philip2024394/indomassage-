@@ -7,12 +7,10 @@ import LocationInput from './LocationInput';
 
 
 interface ProfileFormProps {
-  subType: SubType;
-  onSave: (data: Partner) => void;
+  profile: Partner;
+  onSave: (data: Partial<Partner>) => void;
   onBack: () => void;
 }
-
-// --- Locally Defined Components for this Form ---
 
 // Checkbox Component
 interface CheckboxProps {
@@ -127,12 +125,12 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ label, option
 
 const MASSAGE_TYPES_OPTIONS = ["Balinese Massage", "Deep Tissue", "Reflexology", "Aromatherapy", "Hot Stone", "Shiatsu", "Thai Massage", "Swedish Massage"];
 
-const initialFormData = (subType: SubType): Partial<Partner> => {
+export const initialFormData = (subType: SubType): Partial<Partner> => {
     const commonData = {
         name: '',
         type: 'massage' as const,
         location: '',
-        status: Status.Online,
+        status: Status.Offline,
         image_url: '',
         header_image_url: `https://picsum.photos/seed/${Math.random()}/800/400`,
         whatsapp: '',
@@ -168,9 +166,15 @@ const initialFormData = (subType: SubType): Partial<Partner> => {
 };
 
 
-const ProfileForm: React.FC<ProfileFormProps> = ({ subType, onSave, onBack }) => {
-  const [formData, setFormData] = useState<Partial<Partner>>(initialFormData(subType));
-  const [termsAccepted, setTermsAccepted] = useState(false);
+const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) => {
+  const [formData, setFormData] = useState<Partial<Partner>>(profile);
+  const [termsAccepted, setTermsAccepted] = useState(true); // Default to true for existing users
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setFormData(profile);
+  }, [profile]);
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.currentTarget;
@@ -189,6 +193,8 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ subType, onSave, onBack }) =>
   };
   
   const handleImageChange = useCallback((field: 'image_url' | 'id_card_image_url', file: File) => {
+    // In a real app, you'd upload this to Supabase Storage and get a URL.
+    // For now, we'll use a data URL as a placeholder.
     const reader = new FileReader();
     reader.onloadend = () => {
         setFormData(prev => ({...prev, [field]: reader.result as string}))
@@ -213,21 +219,26 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ subType, onSave, onBack }) =>
   }, []);
 
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!termsAccepted) {
           alert("Please accept the terms and conditions to continue.");
           return;
       }
-      onSave(formData as Partner);
+      setIsSaving(true);
+      await onSave(formData);
+      setIsSaving(false);
+      alert('Profile saved!');
+      onBack(); // Go back to home after saving
   };
   
-  const isTherapist = subType === SubType.HomeService;
+  const isTherapist = profile.sub_type === SubType.HomeService;
   
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-        <button type="button" onClick={onBack} className="text-sm text-orange-500 hover:underline mb-4 flex items-center">
-            &larr; Back to selection
+        <button type="button" onClick={onBack} className="text-sm text-orange-500 hover:underline mb-4 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" /></svg>
+            Back to Dashboard
         </button>
 
         <FormSection title={isTherapist ? "Therapist Information" : "Business Information"}>
@@ -334,7 +345,9 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ subType, onSave, onBack }) =>
                 I understand that I am fully responsible for my own services, government fees, or taxes. 
                 This platform is only a directory for traffic and does not get involved in any disputes, client issues, or payments.
             </Checkbox>
-            <Button type="submit" fullWidth disabled={!termsAccepted}>Save Profile</Button>
+            <Button type="submit" fullWidth disabled={!termsAccepted || isSaving}>
+                {isSaving ? 'Saving...' : 'Save Profile'}
+            </Button>
         </div>
     </form>
   )
@@ -350,7 +363,6 @@ const FormSection: React.FC<{ title: string, children: React.ReactNode }> = ({ t
 );
 
 // --- ICONS ---
-const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.134-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.067-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>;
 const CameraIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-gray-500"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.776 48.776 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" /></svg>;
 const ChevronDownIcon: React.FC<{isOpen: boolean}> = ({ isOpen }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /></svg>;
 

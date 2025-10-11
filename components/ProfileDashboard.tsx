@@ -1,5 +1,3 @@
-
-
 import React, { useCallback, useState } from 'react';
 import { SubType, Partner, Status } from '../types';
 import ProfileForm from './ProfileForm';
@@ -7,45 +5,17 @@ import Button from './Button';
 import Input from './Input';
 import LocationInput from './LocationInput';
 
-
 interface ProfileDashboardProps {
   onLogout: () => void;
-  subType: SubType;
+  profile: Partner;
+  supabase: any;
 }
-
-// --- MOCK DATA ---
-
-const mockTherapist = {
-  name: "Wayan",
-  imageUrl: `https://i.pravatar.cc/150?u=wayan`,
-  location: 'Denpasar, Bali, Indonesia',
-  stats: {
-    status: Status.Offline,
-    acceptance: '95%',
-    completion: '99%',
-  }
-};
-
-const mockPlace = {
-    name: "Ubud Wellness Spa",
-    imageUrl: 'https://i.pravatar.cc/150?u=ubudspa',
-    location: 'Jl. Monkey Forest, Ubud, Bali',
-    stats: {
-        status: Status.Online, 
-        acceptance: '98%',
-        completion: '100%',
-    },
-    openingHours: "10:00 AM - 9:00 PM"
-};
-
-type MockUser = typeof mockTherapist | typeof mockPlace;
 
 const mockStats = {
   today: 7,
   week: 34,
   total: 489,
 };
-
 
 // --- REUSABLE & VIEW COMPONENTS ---
 
@@ -60,21 +30,16 @@ const DashboardSection: React.FC<{ title: string, children: React.ReactNode }> =
 
 const LocationManager: React.FC<{ lastLocation: string; onLocationSet: (location: string) => void; }> = ({ lastLocation, onLocationSet }) => {
     const [currentLocation, setCurrentLocation] = useState(lastLocation);
-
-    const handleConfirmLocation = () => {
-        if (currentLocation) {
-            onLocationSet(currentLocation);
-        } else {
-            alert('Please set a location before continuing.');
-        }
-    };
     
     return (
         <DashboardSection title="Set Your Location">
             <p className="text-sm text-slate-400 -mt-2 mb-6">You must set your current location to go online. This will be visible to customers until you go offline.</p>
             <LocationInput 
                 label="Current Location"
-                onLocationSelect={setCurrentLocation}
+                onLocationSelect={(loc) => {
+                    setCurrentLocation(loc);
+                    onLocationSet(loc);
+                }}
                 initialValue={currentLocation}
             />
             <p className="text-xs text-slate-500 mt-2">Last set location: {lastLocation || 'Not set'}</p>
@@ -82,12 +47,12 @@ const LocationManager: React.FC<{ lastLocation: string; onLocationSet: (location
     );
 };
 
-const TherapistStatusControl: React.FC<{ user: MockUser; onStatusChange: (newStatus: Status) => void; onLocationUpdate: (location: string) => void }> = ({ user, onStatusChange, onLocationUpdate }) => {
-    const isOnline = user.stats.status === Status.Online;
-    const [location, setLocation] = useState(user.location);
+const TherapistStatusControl: React.FC<{ profile: Partner; onProfileUpdate: (updates: Partial<Partner>) => void; }> = ({ profile, onProfileUpdate }) => {
+    const isOnline = profile.status === Status.Online;
+    const [location, setLocation] = useState(profile.location);
     
     const statusIndicatorColor = () => {
-        switch(user.stats.status) {
+        switch(profile.status) {
             case Status.Online: return 'bg-green-400';
             case Status.Busy: return 'bg-yellow-400';
             case Status.Offline: return 'bg-slate-500';
@@ -97,17 +62,16 @@ const TherapistStatusControl: React.FC<{ user: MockUser; onStatusChange: (newSta
 
     const handleGoOnline = () => {
         if (location) {
-            onLocationUpdate(location);
-            onStatusChange(Status.Online);
+            onProfileUpdate({ location, status: Status.Online });
         } else {
             alert("Please set your location before going online.");
         }
     };
 
-    if (!isOnline && user.stats.status === Status.Offline) {
+    if (profile.status === Status.Offline) {
         return (
             <div className="space-y-8">
-                <LocationManager lastLocation={user.location} onLocationSet={setLocation} />
+                <LocationManager lastLocation={profile.location} onLocationSet={setLocation} />
                 <div className="p-4">
                     <Button onClick={handleGoOnline} fullWidth>
                         Set Location & Go Online
@@ -120,18 +84,18 @@ const TherapistStatusControl: React.FC<{ user: MockUser; onStatusChange: (newSta
     return (
         <DashboardSection title="Your Status">
             <p className="text-sm text-slate-400 -mt-2 mb-6">
-                Your location is currently set to: <span className="font-semibold text-slate-300">{user.location}</span>
+                Your location is currently set to: <span className="font-semibold text-slate-300">{profile.location}</span>
             </p>
             <div className="flex justify-center items-center gap-2 text-center bg-gray-800/80 p-4 rounded-lg">
-                <span className={`w-3 h-3 rounded-full ${statusIndicatorColor()} ${user.stats.status === Status.Online ? 'animate-pulse' : ''}`}></span>
-                <p className="font-semibold">Current Status: <span className="text-orange-500 capitalize">{user.stats.status}</span></p>
+                <span className={`w-3 h-3 rounded-full ${statusIndicatorColor()} ${profile.status === Status.Online ? 'animate-pulse' : ''}`}></span>
+                <p className="font-semibold">Current Status: <span className="text-orange-500 capitalize">{profile.status}</span></p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-                <Button onClick={() => onStatusChange(Status.Offline)}>
+                <Button onClick={() => onProfileUpdate({ status: Status.Offline })}>
                     Go Offline
                 </Button>
-                <Button onClick={() => onStatusChange(user.stats.status === Status.Busy ? Status.Online : Status.Busy)} variant="secondary">
-                    {user.stats.status === Status.Busy ? 'Set to Online' : 'Set to Busy'}
+                <Button onClick={() => onProfileUpdate({ status: profile.status === Status.Busy ? Status.Online : Status.Busy })} variant="secondary">
+                    {profile.status === Status.Busy ? 'Set to Online' : 'Set to Busy'}
                 </Button>
             </div>
         </DashboardSection>
@@ -139,12 +103,12 @@ const TherapistStatusControl: React.FC<{ user: MockUser; onStatusChange: (newSta
 };
 
 
-const PlaceStatusView: React.FC<{ status: Status; openingHours: string; onStatusChange: (newStatus: Status) => void; }> = ({ status, openingHours, onStatusChange }) => {
-    const isOpen = status === Status.Online;
+const PlaceStatusView: React.FC<{ profile: Partner; onProfileUpdate: (updates: Partial<Partner>) => void; }> = ({ profile, onProfileUpdate }) => {
+    const isOpen = profile.status === Status.Online;
 
     const handleToggleStatus = () => {
         const newStatus = isOpen ? Status.Offline : Status.Online;
-        onStatusChange(newStatus);
+        onProfileUpdate({ status: newStatus });
     };
 
     return (
@@ -157,7 +121,7 @@ const PlaceStatusView: React.FC<{ status: Status; openingHours: string; onStatus
                     <span className={`w-4 h-4 rounded-full ${isOpen ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`}></span>
                     <p className="text-2xl font-bold">Currently: <span className="text-orange-500 capitalize">{isOpen ? 'Open' : 'Closed'}</span></p>
                 </div>
-                <p className="text-slate-400 mt-3">Operating Hours: {openingHours}</p>
+                <p className="text-slate-400 mt-3">Operating Hours: {(profile as any).opening_hours || 'Not set'}</p>
             </div>
             <div className="mt-6">
                 <Button onClick={handleToggleStatus} variant={isOpen ? 'danger' : 'secondary'} fullWidth>
@@ -247,52 +211,51 @@ const Earnings: React.FC = () => {
 
 type ActiveView = 'home' | 'earnings' | 'history' | 'profile';
 
-const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, subType }) => {
+const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: initialProfile, supabase }) => {
   const [activeView, setActiveView] = useState<ActiveView>('home');
-  const [user, setUser] = useState<MockUser>(subType === SubType.HomeService ? mockTherapist : mockPlace);
+  const [profile, setProfile] = useState<Partner>(initialProfile);
   const [bookedDates, setBookedDates] = useState<string[]>(['2024-12-24', '2024-12-25', '2024-12-31']);
 
-  const handleStatusChange = (newStatus: Status) => {
-    setUser(prevUser => ({
-        ...prevUser,
-        stats: { ...prevUser.stats, status: newStatus },
-    }));
-  };
-  
-  const handleLocationUpdate = (newLocation: string) => {
-      setUser(prevUser => ({ ...prevUser, location: newLocation }));
+  const handleProfileUpdate = async (updates: Partial<Partner>) => {
+    const newProfile = { ...profile, ...updates };
+    setProfile(newProfile); // Optimistic update
+
+    const { error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('user_id', profile.user_id);
+
+    if (error) {
+        console.error("Failed to update profile:", error);
+        setProfile(profile); // Revert on error
+        alert("Failed to update profile. Please try again.");
+    }
   };
 
-  const handleSaveProfile = useCallback((data: Partner) => {
-    console.log('Saving profile data to Supabase:', data);
-    setUser(prev => ({...prev, name: data.name, imageUrl: data.image_url, location: data.location}));
-    alert('Profile saved! Check the console for the data structure.');
-  }, []);
-
-  const handleBack = () => {
-    onLogout();
-  };
+  const handleBackToHome = () => {
+    setActiveView('home');
+  }
   
   const renderContent = () => {
     switch(activeView) {
       case 'home':
-        return subType === SubType.HomeService 
-          ? <TherapistStatusControl user={user} onStatusChange={handleStatusChange} onLocationUpdate={handleLocationUpdate}/>
-          : <PlaceStatusView status={user.stats.status} openingHours={(user as typeof mockPlace).openingHours} onStatusChange={handleStatusChange} />;
+        return profile.sub_type === SubType.HomeService 
+          ? <TherapistStatusControl profile={profile} onProfileUpdate={handleProfileUpdate} />
+          : <PlaceStatusView profile={profile} onProfileUpdate={handleProfileUpdate} />;
       case 'profile':
-        return <ProfileForm subType={subType} onSave={handleSaveProfile} onBack={handleBack} />;
+        return <ProfileForm profile={profile} onSave={handleProfileUpdate} onBack={handleBackToHome} />;
       case 'earnings':
         return <Earnings />;
       case 'history':
         return <BookingHistory bookedDates={bookedDates} setBookedDates={setBookedDates} />;
       default:
-        return <ProfileForm subType={subType} onSave={handleSaveProfile} onBack={handleBack} />;
+        return <p>Not found</p>;
     }
   };
 
   return (
     <div className="flex flex-col h-screen bg-black overflow-hidden">
-      <ProfileHeader user={user} />
+      <ProfileHeader profile={profile} />
       <main id="main-content" className="flex-grow overflow-y-auto p-4 pb-28">
           {renderContent()}
       </main>
@@ -301,14 +264,14 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, subType }
   );
 };
 
-const ProfileHeader: React.FC<{ user: MockUser }> = ({ user }) => (
+const ProfileHeader: React.FC<{ profile: Partner }> = ({ profile }) => (
     <header className="flex flex-col items-center p-6 text-center">
-        <img src={user.imageUrl} alt="Profile" className="w-24 h-24 rounded-full border-4 border-gray-800 ring-2 ring-orange-500" />
-        <h1 className="text-2xl font-bold text-white mt-4">{user.name}</h1>
+        <img src={profile.image_url || `https://i.pravatar.cc/150?u=${profile.id}`} alt="Profile" className="w-24 h-24 rounded-full border-4 border-gray-800 ring-2 ring-orange-500 object-cover" />
+        <h1 className="text-2xl font-bold text-white mt-4">{profile.name}</h1>
         <div className="mt-6 w-full max-w-md mx-auto bg-gray-900/50 backdrop-blur-xl border border-gray-700/80 rounded-2xl p-4 flex justify-around">
-            <StatItem value={user.stats.status} label="Status" />
-            <StatItem value={user.stats.acceptance} label="Acceptance" />
-            <StatItem value={user.stats.completion} label="Completion" />
+            <StatItem value={profile.status} label="Status" />
+            <StatItem value={'N/A'} label="Acceptance" />
+            <StatItem value={'N/A'} label="Completion" />
         </div>
     </header>
 );
