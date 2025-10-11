@@ -2,7 +2,7 @@ import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   fullWidth?: boolean;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'danger';
 }
 
 const Button: React.FC<ButtonProps> = ({ children, fullWidth = false, variant = 'primary', ...props }) => {
@@ -12,6 +12,7 @@ const Button: React.FC<ButtonProps> = ({ children, fullWidth = false, variant = 
   const variantClasses = {
     primary: "bg-orange-500 text-white hover:bg-orange-600 focus:ring-orange-500",
     secondary: "bg-gray-800 text-slate-200 hover:bg-gray-700 focus:ring-gray-600 border border-gray-700",
+    danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500",
   };
 
   return (

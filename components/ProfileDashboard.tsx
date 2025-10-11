@@ -1,4 +1,5 @@
 
+
 import React, { useCallback, useState } from 'react';
 import { SubType, Partner, Status } from '../types';
 import ProfileForm from './ProfileForm';
@@ -138,20 +139,34 @@ const TherapistStatusControl: React.FC<{ user: MockUser; onStatusChange: (newSta
 };
 
 
-const PlaceStatusView: React.FC<{ status: Status; openingHours: string; }> = ({ status, openingHours }) => (
-     <DashboardSection title="Business Status">
-        <p className="text-sm text-slate-400 -mt-2 mb-6">
-            Your status is 'Open' during operating hours. Booked dates from your history will automatically set your status to 'Busy'.
-        </p>
-        <div className="text-center p-6 bg-gray-800/80 rounded-lg">
-            <div className="flex justify-center items-center gap-3">
-                <span className={`w-4 h-4 rounded-full ${status === Status.Online ? 'bg-green-400' : 'bg-red-500'}`}></span>
-                <p className="text-2xl font-bold">Currently: <span className="text-orange-500 capitalize">{status === Status.Online ? 'Open' : 'Closed'}</span></p>
+const PlaceStatusView: React.FC<{ status: Status; openingHours: string; onStatusChange: (newStatus: Status) => void; }> = ({ status, openingHours, onStatusChange }) => {
+    const isOpen = status === Status.Online;
+
+    const handleToggleStatus = () => {
+        const newStatus = isOpen ? Status.Offline : Status.Online;
+        onStatusChange(newStatus);
+    };
+
+    return (
+         <DashboardSection title="Business Status">
+            <p className="text-sm text-slate-400 -mt-2 mb-6">
+                Your status is 'Open' during operating hours. You can manually override this below. Booked dates from your history will automatically set your status to 'Busy'.
+            </p>
+            <div className="text-center p-6 bg-gray-800/80 rounded-lg">
+                <div className="flex justify-center items-center gap-3">
+                    <span className={`w-4 h-4 rounded-full ${isOpen ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`}></span>
+                    <p className="text-2xl font-bold">Currently: <span className="text-orange-500 capitalize">{isOpen ? 'Open' : 'Closed'}</span></p>
+                </div>
+                <p className="text-slate-400 mt-3">Operating Hours: {openingHours}</p>
             </div>
-            <p className="text-slate-400 mt-3">Operating Hours: {openingHours}</p>
-        </div>
-    </DashboardSection>
-);
+            <div className="mt-6">
+                <Button onClick={handleToggleStatus} variant={isOpen ? 'danger' : 'secondary'} fullWidth>
+                    {isOpen ? 'Set Manually to Closed' : 'Set Manually to Open'}
+                </Button>
+            </div>
+        </DashboardSection>
+    );
+};
 
 const BookingHistory: React.FC<{ bookedDates: string[]; setBookedDates: (dates: string[]) => void; }> = ({ bookedDates, setBookedDates }) => {
     const [newDate, setNewDate] = useState('');
@@ -263,7 +278,7 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, subType }
       case 'home':
         return subType === SubType.HomeService 
           ? <TherapistStatusControl user={user} onStatusChange={handleStatusChange} onLocationUpdate={handleLocationUpdate}/>
-          : <PlaceStatusView status={user.stats.status} openingHours={(user as typeof mockPlace).openingHours} />;
+          : <PlaceStatusView status={user.stats.status} openingHours={(user as typeof mockPlace).openingHours} onStatusChange={handleStatusChange} />;
       case 'profile':
         return <ProfileForm subType={subType} onSave={handleSaveProfile} onBack={handleBack} />;
       case 'earnings':
