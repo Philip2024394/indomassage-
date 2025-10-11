@@ -125,7 +125,7 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ label, option
 
 const MASSAGE_TYPES_OPTIONS = ["Balinese Massage", "Deep Tissue", "Reflexology", "Aromatherapy", "Hot Stone", "Shiatsu", "Thai Massage", "Swedish Massage"];
 
-export const initialFormData = (subType: SubType): Partial<Partner> => {
+export const initialFormData = (): Partial<Partner> => {
     return {
         name: '',
         type: 'massage' as const,

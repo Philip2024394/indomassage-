@@ -183,7 +183,7 @@ const App: React.FC = () => {
     return (
         <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
             <div className="w-full h-screen">
-                <Auth userType={SubType.HomeService} supabase={supabase} />
+                <Auth supabase={supabase} />
             </div>
         </div>
     );

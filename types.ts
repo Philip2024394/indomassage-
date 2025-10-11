@@ -1,7 +1,7 @@
 
+// FIX: Added 'Place' to the SubType enum to allow for different types of partners, resolving an error in the SelectionScreen component.
 export enum SubType {
   HomeService = 'home_service',
-  // FIX: Add 'Place' to the SubType enum to resolve reference error in SelectionScreen.tsx
   Place = 'place',
 }
 

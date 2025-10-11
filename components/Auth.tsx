@@ -6,7 +6,6 @@ import { SubType } from '../types';
 import { initialFormData } from './ProfileForm';
 
 interface AuthProps {
-  userType: SubType;
   supabase: any;
 }
 
@@ -31,7 +30,7 @@ const HOME_SERVICE_HEADER_IMAGES = [
   'https://ik.imagekit.io/7grri5v7d/massage%20image%2016.png?updatedAt=1760187700624',
 ];
 
-const Auth: React.FC<AuthProps> = ({ userType, supabase }) => {
+const Auth: React.FC<AuthProps> = ({ supabase }) => {
   const [isLoginView, setIsLoginView] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -61,30 +60,28 @@ const Auth: React.FC<AuthProps> = ({ userType, supabase }) => {
       if (signUpError) {
         setError(signUpError.message);
       } else if (data.user) {
-        let headerImageUrl = '';
-        // Assign a rotating header image ONLY for home service therapists
-        if (userType === SubType.HomeService) {
-            const { count, error: countError } = await supabase
-                .from('profiles')
-                .select('*', { count: 'exact', head: true })
-                .eq('sub_type', SubType.HomeService);
+        // Assign a rotating header image for the new therapist
+        const { count, error: countError } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('sub_type', SubType.HomeService);
 
-            if (countError) {
-                console.error('Error counting profiles:', countError);
-                // Fallback to a random image from the list if count fails
-                headerImageUrl = HOME_SERVICE_HEADER_IMAGES[Math.floor(Math.random() * HOME_SERVICE_HEADER_IMAGES.length)];
-            } else {
-                const nextImageIndex = (count || 0) % HOME_SERVICE_HEADER_IMAGES.length;
-                headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
-            }
+        let headerImageUrl = '';
+        if (countError) {
+            console.error('Error counting profiles:', countError);
+            // Fallback to a random image from the list if count fails
+            headerImageUrl = HOME_SERVICE_HEADER_IMAGES[Math.floor(Math.random() * HOME_SERVICE_HEADER_IMAGES.length)];
+        } else {
+            const nextImageIndex = (count || 0) % HOME_SERVICE_HEADER_IMAGES.length;
+            headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
         }
 
         // Create a profile entry
         const profileData = {
-            ...initialFormData(userType),
+            ...initialFormData(),
             user_id: data.user.id,
             name: 'New Member', // Default name
-            ...(userType === SubType.HomeService && { header_image_url: headerImageUrl }),
+            header_image_url: headerImageUrl,
         };
         const { error: profileError } = await supabase.from('profiles').insert(profileData);
         if (profileError) {
