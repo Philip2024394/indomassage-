@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import ProfileDashboard from './components/ProfileDashboard';
@@ -60,34 +59,71 @@ const ConfigurationError: React.FC = () => (
     </div>
 );
 
+// --- Connection Error Component ---
+const ConnectionError: React.FC<{ message: string; onRetry: () => void; }> = ({ message, onRetry }) => (
+    <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center text-white p-8">
+        <div className="text-center bg-gray-900 p-8 rounded-2xl border border-yellow-500/50 max-w-lg w-full shadow-lg">
+            <h1 className="text-2xl font-bold text-yellow-400 mb-4">Connection Issue</h1>
+            <p className="text-slate-300 mb-6">{message}</p>
+            <button
+              onClick={onRetry}
+              className="px-4 py-3 rounded-lg font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black transition-all duration-150 text-base bg-orange-500 text-white hover:bg-orange-600 focus:ring-orange-500"
+            >
+              Retry
+            </button>
+        </div>
+    </div>
+);
+
+
 // --- Main App Component ---
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Partner | null>(null);
   const [userType, setUserType] = useState<SubType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const checkSession = async () => {
     if (!supabase) {
-      setLoading(false);
-      return;
+        setLoading(false);
+        return;
     }
-    const getSession = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
+    setConnectionError(null);
+    setLoading(true);
+
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+        console.error("Supabase connection error:", error);
+        setConnectionError("Failed to connect to the database. Please check your internet connection and try again.");
+        setLoading(false);
+    } else {
         setSession(session);
+        // If there's no session, we're done loading. The user will see the auth screen.
         if (!session) {
             setLoading(false);
         }
-    };
-    getSession();
+        // If there is a session, the profile useEffect will trigger, which will handle the loading state.
+    }
+  };
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+  useEffect(() => {
+    checkSession(); // Initial check on mount
 
-    return () => {
-      authListener?.subscription.unsubscribe();
-    };
+    if (supabase) {
+        const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+            // When auth state changes, if a new session appears, reset profile to trigger fetch
+            if (session?.user?.id !== profile?.user_id) {
+                setProfile(null);
+            }
+            setSession(session);
+        });
+
+        return () => {
+            authListener?.subscription.unsubscribe();
+        };
+    }
   }, []);
 
   useEffect(() => {
@@ -103,8 +139,8 @@ const App: React.FC = () => {
 
         if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
             console.error('Error fetching profile:', error);
-        }
-        if (data) {
+            setConnectionError("Could not load your profile. Please check your internet connection.");
+        } else if (data) {
             setProfile(data as Partner);
             setUserType(data.sub_type);
         }
@@ -127,15 +163,25 @@ const App: React.FC = () => {
   
   const handleLogout = async () => {
     if (!supabase) return;
+    setLoading(true);
     const { error } = await supabase.auth.signOut();
-    if (error) console.error('Error logging out:', error);
-    // State updates will be handled by onAuthStateChange
+    if (error) {
+      console.error('Error logging out:', error);
+      setConnectionError("Failed to log out. Please check your connection.");
+    }
+    // State updates will be handled by onAuthStateChange, which sets session to null
+    // and triggers the profile useEffect to clear the profile.
+    setLoading(false);
   };
 
   if (!isSupabaseConfigured || !isGoogleMapsConfigured) {
     return <ConfigurationError />;
   }
   
+  if (connectionError) {
+    return <ConnectionError message={connectionError} onRetry={checkSession} />
+  }
+
   if (loading) {
     return (
         <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center text-white">

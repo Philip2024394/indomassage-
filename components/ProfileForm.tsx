@@ -132,7 +132,6 @@ export const initialFormData = (subType: SubType): Partial<Partner> => {
         location: '',
         status: Status.Offline,
         image_url: '',
-        header_image_url: `https://picsum.photos/seed/${Math.random()}/800/400`,
         whatsapp: '',
         bio: '',
         massage_types: [],
@@ -147,12 +146,14 @@ export const initialFormData = (subType: SubType): Partial<Partner> => {
         return {
             ...commonData,
             sub_type: SubType.HomeService,
+            // header_image_url is now set on creation in Auth.tsx
             years_of_experience: 0,
             id_card_image_url: '',
         };
     } else {
         return {
             ...commonData,
+            header_image_url: `https://picsum.photos/seed/${Math.random()}/800/400`,
             image_url: `https://picsum.photos/seed/${Math.random()}/400/400`,
             sub_type: SubType.Place,
             opening_hours: '',

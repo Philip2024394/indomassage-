@@ -10,6 +10,27 @@ interface AuthProps {
   supabase: any;
 }
 
+// A predefined list of high-quality header images for new Home Service therapists.
+// The system will cycle through this list for each new sign-up.
+const HOME_SERVICE_HEADER_IMAGES = [
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%201.png?updatedAt=1760186885261',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%202.png?updatedAt=1760186944882',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%203.png?updatedAt=1760186998015',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%204.png?updatedAt=1760187040909',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%205.png?updatedAt=1760187081702',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%206.png?updatedAt=1760187126997',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%207.png?updatedAt=1760187181168',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%208.png?updatedAt=1760187222991',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%209.png?updatedAt=1760187266868',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2010.png?updatedAt=1760187307232',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2011.png?updatedAt=1760187422314',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2012.png?updatedAt=1760187511503',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2013.png?updatedAt=1760187547313',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2014.png?updatedAt=1760187606823',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2015.png?updatedAt=1760187650860',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2016.png?updatedAt=1760187700624',
+];
+
 const Auth: React.FC<AuthProps> = ({ userType, onBack, supabase }) => {
   const [isLoginView, setIsLoginView] = useState(true);
   const [email, setEmail] = useState('');
@@ -40,11 +61,30 @@ const Auth: React.FC<AuthProps> = ({ userType, onBack, supabase }) => {
       if (signUpError) {
         setError(signUpError.message);
       } else if (data.user) {
+        let headerImageUrl = '';
+        // Assign a rotating header image ONLY for home service therapists
+        if (userType === SubType.HomeService) {
+            const { count, error: countError } = await supabase
+                .from('profiles')
+                .select('*', { count: 'exact', head: true })
+                .eq('sub_type', SubType.HomeService);
+
+            if (countError) {
+                console.error('Error counting profiles:', countError);
+                // Fallback to a random image from the list if count fails
+                headerImageUrl = HOME_SERVICE_HEADER_IMAGES[Math.floor(Math.random() * HOME_SERVICE_HEADER_IMAGES.length)];
+            } else {
+                const nextImageIndex = (count || 0) % HOME_SERVICE_HEADER_IMAGES.length;
+                headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
+            }
+        }
+
         // Create a profile entry
         const profileData = {
             ...initialFormData(userType),
             user_id: data.user.id,
             name: 'New Member', // Default name
+            ...(userType === SubType.HomeService && { header_image_url: headerImageUrl }),
         };
         const { error: profileError } = await supabase.from('profiles').insert(profileData);
         if (profileError) {
