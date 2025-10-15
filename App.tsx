@@ -6,7 +6,6 @@ import { SubType, Partner } from './types';
 import { initialFormData } from './components/ProfileForm';
 import SelectionScreen from './components/SelectionScreen';
 import PublicProfileView from './components/PublicProfileView';
-import ConfigurationSetup from './components/ConfigurationSetup';
 
 // @ts-ignore
 const { createClient } = window.supabase;
@@ -24,13 +23,8 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // 4. Under "API restrictions", select "Restrict key" and choose: Maps JavaScript API, Places API, and Geocoding API.
 const GOOGLE_MAPS_API_KEY = 'AIzaSyCxqJxKLJapoRePJ8xz1wK2sqBUOdd7O2c';
 
-
-// --- TYPES ---
-interface AppConfig {
-  supabaseUrl: string;
-  supabaseKey: string;
-  googleMapsKey: string;
-}
+// Create the Supabase client once. It is now a constant.
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // A predefined list of high-quality header images for new Home Service therapists.
 // The system will cycle through this list for each new sign-up.
@@ -87,63 +81,14 @@ const ConnectionError: React.FC<{ message: string; onRetry: () => void; }> = ({ 
 
 // --- Main App Component ---
 const App: React.FC = () => {
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [supabase, setSupabase] = useState<any | null>(null);
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Partner | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   const [publicProfileId, setPublicProfileId] = useState<string | null>(null);
-
-  const handleConfiguration = (gmapsConfig: { googleMapsKey: string }) => {
-    // This function is kept as a fallback for the ConfigurationSetup component
-    // in case the hardcoded key is removed in the future.
-    const supabaseUrl = SUPABASE_URL;
-    const supabaseKey = SUPABASE_ANON_KEY;
-
-    const fullConfig: AppConfig = {
-      supabaseUrl,
-      supabaseKey,
-      googleMapsKey: gmapsConfig.googleMapsKey,
-    };
-    
-    localStorage.setItem('app_config', JSON.stringify(fullConfig));
-    setConfig(fullConfig);
-    setSupabase(createClient(fullConfig.supabaseUrl, fullConfig.supabaseKey));
-    setLoading(true); // Start loading app data
-  };
-
-  useEffect(() => {
-    // This effect runs once to set up the application's configuration.
-    const supabaseUrl = SUPABASE_URL;
-    const supabaseKey = SUPABASE_ANON_KEY;
-    const googleMapsKey = GOOGLE_MAPS_API_KEY;
-
-    // Supabase keys are hardcoded and always present.
-    if (!supabaseUrl || !supabaseKey) {
-        console.error("CRITICAL: Supabase URL or Key is missing from the source code.");
-        setLoading(false); 
-        return;
-    }
-
-    // Since the Google Maps key is also hardcoded, we can directly configure the app.
-    if (googleMapsKey) {
-        console.log("Configuration loaded from hardcoded values.");
-        const initialConfig: AppConfig = { supabaseUrl, supabaseKey, googleMapsKey };
-        setConfig(initialConfig);
-        setSupabase(createClient(initialConfig.supabaseUrl, initialConfig.supabaseKey));
-    } else {
-        // This will only happen if the GOOGLE_MAPS_API_KEY constant is empty.
-        // The setup screen is shown as a fallback.
-        console.warn("Google Maps API key is missing. The setup screen will be displayed.");
-        setLoading(false);
-    }
-  }, []);
   
   const initializeApp = async () => {
-      if (!supabase) return;
-
       const urlParams = new URLSearchParams(window.location.search);
       const profileId = urlParams.get('profile');
 
@@ -166,38 +111,32 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Load the Google Maps script once config is available
-    if (config?.googleMapsKey) {
-      const scriptId = 'google-maps-script';
-      if (!document.getElementById(scriptId)) {
-        const script = document.createElement('script');
-        script.id = scriptId;
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${config.googleMapsKey}&libraries=places`;
-        script.async = true;
-        document.head.appendChild(script);
-      }
+    // Load the Google Maps script once.
+    const scriptId = 'google-maps-script';
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+      script.async = true;
+      document.head.appendChild(script);
     }
 
-    // Initialize the app and set up auth listeners once the supabase client is ready.
-    if (supabase) {
-        initializeApp();
+    // Initialize the app and set up auth listeners.
+    initializeApp();
 
-        const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-            setProfile(null);
-            setNeedsProfileSetup(false);
-            setPublicProfileId(null);
-            setSession(session);
-        });
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+        setProfile(null);
+        setNeedsProfileSetup(false);
+        setPublicProfileId(null);
+        setSession(session);
+    });
 
-        return () => {
-            authListener?.subscription.unsubscribe();
-        };
-    }
-  }, [supabase]);
+    return () => {
+        authListener?.subscription.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
-    if (!supabase) return;
-    
     const fetchProfile = async () => {
       if (session?.user && !publicProfileId) {
         setLoading(true);
@@ -246,10 +185,10 @@ const App: React.FC = () => {
         // No session and not a public view, so we are done loading.
         setLoading(false);
     }
-  }, [session, publicProfileId, supabase]);
+  }, [session, publicProfileId]);
   
   const handleCreateProfile = async (subType: SubType) => {
-    if (!supabase || !session?.user) return;
+    if (!session?.user) return;
     setLoading(true);
     setNeedsProfileSetup(false);
 
@@ -310,7 +249,6 @@ const App: React.FC = () => {
   };
 
   if (loading) return <LoadingScreen />;
-  if (!config || !supabase) return <ConfigurationSetup onConfigured={handleConfiguration} />;
   if (connectionError) return <ConnectionError message={connectionError} onRetry={initializeApp} />
 
   if (publicProfileId && profile) {
