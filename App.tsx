@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import ProfileDashboard from './components/ProfileDashboard';
 import { SubType, Partner } from './types';
+import { initialFormData } from './components/ProfileForm';
 
 // Extend the Window interface to include our global API key for TypeScript
 declare global {
@@ -24,6 +25,28 @@ const GOOGLE_MAPS_API_KEY = window.GOOGLE_MAPS_API_KEY;
 
 const isSupabaseConfigured = SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
 const isGoogleMapsConfigured = GOOGLE_MAPS_API_KEY && GOOGLE_MAPS_API_KEY !== 'YOUR_GOOGLE_MAPS_API_KEY';
+
+// A predefined list of high-quality header images for new Home Service therapists.
+// The system will cycle through this list for each new sign-up.
+const HOME_SERVICE_HEADER_IMAGES = [
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%201.png?updatedAt=1760186885261',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%202.png?updatedAt=1760186944882',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%203.png?updatedAt=1760186998015',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%204.png?updatedAt=1760187040909',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%205.png?updatedAt=1760187081702',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%206.png?updatedAt=1760187126997',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%207.png?updatedAt=1760187181168',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%208.png?updatedAt=1760187222991',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%209.png?updatedAt=1760187266868',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2010.png?updatedAt=1760187307232',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2011.png?updatedAt=1760187422314',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2012.png?updatedAt=1760187511503',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2013.png?updatedAt=1760187547313',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2014.png?updatedAt=1760187606823',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2015.png?updatedAt=1760187650860',
+  'https://ik.imagekit.io/7grri5v7d/massage%20image%2016.png?updatedAt=1760187700624',
+];
+
 
 // Initialize Supabase client ONLY if configured
 const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
@@ -128,6 +151,11 @@ const App: React.FC = () => {
     if (!supabase) return;
     const fetchProfile = async () => {
       if (session?.user) {
+        if (profile && profile.user_id === session.user.id) {
+            setLoading(false);
+            return; // Profile already loaded for this session
+        }
+          
         setLoading(true);
         const { data, error } = await supabase
           .from('profiles')
@@ -135,7 +163,45 @@ const App: React.FC = () => {
           .eq('user_id', session.user.id)
           .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+        if (error && error.code === 'PGRST116') { // No rows found - this is a new user
+            console.log('No profile found for new user, creating one...');
+             // Assign a rotating header image for the new therapist
+            const { count, error: countError } = await supabase
+                .from('profiles')
+                .select('*', { count: 'exact', head: true })
+                .eq('sub_type', SubType.HomeService);
+
+            let headerImageUrl = '';
+            if (countError) {
+                console.error('Error counting profiles:', countError);
+                // Fallback to a random image from the list if count fails
+                headerImageUrl = HOME_SERVICE_HEADER_IMAGES[Math.floor(Math.random() * HOME_SERVICE_HEADER_IMAGES.length)];
+            } else {
+                const nextImageIndex = (count || 0) % HOME_SERVICE_HEADER_IMAGES.length;
+                headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
+            }
+            
+            const newProfileData = {
+                ...initialFormData(),
+                user_id: session.user.id,
+                name: 'New Member', // Default name
+                header_image_url: headerImageUrl,
+            };
+
+            const { data: insertedProfile, error: profileError } = await supabase
+                .from('profiles')
+                .insert(newProfileData)
+                .select()
+                .single();
+
+            if (profileError) {
+                 console.error('Error creating profile:', profileError);
+                 setConnectionError(`Account created, but failed to create a profile automatically. Please try again.`);
+            } else {
+                setProfile(insertedProfile as Partner);
+            }
+
+        } else if (error) { 
             console.error('Error fetching profile:', error);
             setConnectionError("Could not load your profile. Please check your internet connection.");
         } else if (data) {
