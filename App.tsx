@@ -76,28 +76,60 @@ const App: React.FC = () => {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   const [publicProfileId, setPublicProfileId] = useState<string | null>(null);
+  const [devLoginAttempted, setDevLoginAttempted] = useState(false);
   
   const initializeApp = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const profileId = urlParams.get('profile');
+      setConnectionError(null);
+      setLoading(true);
 
-      if (profileId) {
-          setPublicProfileId(profileId);
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+          console.error("Supabase connection error:", error);
+          setConnectionError("Failed to connect to the database. Please check your internet connection and try again.");
       } else {
-          setConnectionError(null);
-          setLoading(true);
-
-          const { data: { session }, error } = await supabase.auth.getSession();
-          
-          if (error) {
-              console.error("Supabase connection error:", error);
-              setConnectionError("Failed to connect to the database. Please check your internet connection and try again.");
-          } else {
-              setSession(session);
-          }
+          setSession(session);
       }
       // Loading state will be handled by profile fetching
   };
+  
+  const handleDeveloperLogin = async () => {
+    setLoading(true);
+    const devEmail = 'dev-user@example.com';
+    const devPassword = 'password123';
+
+    // Attempt to sign in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: devEmail,
+        password: devPassword,
+    });
+
+    if (signInError) {
+        // If sign-in fails because the user doesn't exist, try to sign them up
+        if (signInError.message.includes('Invalid login credentials')) {
+            console.log('Developer account not found. Attempting to create one...');
+            const { error: signUpError } = await supabase.auth.signUp({
+                email: devEmail,
+                password: devPassword,
+            });
+
+            if (signUpError) {
+                console.error('Automatic dev account sign-up failed:', signUpError.message);
+                setConnectionError(`Could not automatically create dev account. Please ensure email confirmation is OFF in your Supabase project settings and try again.`);
+                setLoading(false);
+            } else {
+                // SignUp successful, onAuthStateChange will handle the new session.
+                console.log('Developer account created successfully. You are now logged in.');
+            }
+        } else {
+            console.error('Dev login failed:', signInError.message);
+            setConnectionError('An unexpected error occurred during developer login.');
+            setLoading(false);
+        }
+    }
+    // Successful sign-in is handled by onAuthStateChange
+  };
+
 
   useEffect(() => {
     // Load the Google Maps script once.
@@ -110,20 +142,35 @@ const App: React.FC = () => {
       document.head.appendChild(script);
     }
 
-    // Initialize the app and set up auth listeners.
-    initializeApp();
+    const urlParams = new URLSearchParams(window.location.search);
+    const profileId = urlParams.get('profile');
+    const devAccess = urlParams.get('dev-access');
+    
+    if (profileId) {
+        setPublicProfileId(profileId);
+    } else if (devAccess === 'true' && !devLoginAttempted) {
+        setDevLoginAttempted(true);
+        handleDeveloperLogin();
+    } else {
+        initializeApp();
+    }
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
         setProfile(null);
         setNeedsProfileSetup(false);
-        setPublicProfileId(null);
+        
+        // Only clear public view if not navigating away from a public profile link
+        if (!window.location.search.includes('profile=')) {
+          setPublicProfileId(null);
+        }
+        
         setSession(session);
     });
 
     return () => {
         authListener?.subscription.unsubscribe();
     };
-  }, []);
+  }, [devLoginAttempted]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -230,6 +277,10 @@ const App: React.FC = () => {
   const handleLogout = async () => {
     if (!supabase) return;
     setLoading(true);
+    // Clear dev access from URL on logout
+    if (window.location.search.includes('dev-access')) {
+        window.history.pushState({}, '', window.location.pathname);
+    }
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Error logging out:', error);

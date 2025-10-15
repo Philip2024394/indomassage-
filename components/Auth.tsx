@@ -111,7 +111,8 @@ const Auth: React.FC<AuthProps> = ({ supabase }) => {
                     setError(null);
                     setMessage(null);
                 }}
-                className="text-sm text-orange-500 hover:underline"
+                className="text-sm text-orange-500 hover:underline disabled:opacity-50"
+                disabled={loading}
             >
                 {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
             </button>
