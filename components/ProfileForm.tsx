@@ -140,7 +140,6 @@ const GalleryManager: React.FC<{
         const files = Array.from(e.target.files || []);
         if (files.length > 0) {
             onNewFilesSelected(files);
-            // FIX: Add type assertion to resolve `unknown` type error on `file`.
             const newPreviews = files.map(file => URL.createObjectURL(file as Blob));
             setPreviews(prev => [...prev, ...newPreviews]);
         }
@@ -313,7 +312,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
     // Helper to upload an image to Supabase Storage
     const uploadImage = async (file: File, path: string): Promise<string | null> => {
         const { data, error } = await supabase.storage
-            .from('profile-assets') // NOTE: Make sure you have a bucket named 'profile-assets'
+            .from('profiles')
             .upload(path, file, {
                 cacheControl: '3600',
                 upsert: true, // Overwrite file if it exists
@@ -326,7 +325,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
         }
 
         const { data: { publicUrl } } = supabase.storage
-            .from('profile-assets')
+            .from('profiles')
             .getPublicUrl(data.path);
             
         return publicUrl;
@@ -342,7 +341,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
         // Upload profile picture if a new one was selected
         if (profileImageFile) {
             const fileExt = profileImageFile.name.split('.').pop();
-            const filePath = `profiles/${userId}/avatar.${fileExt}`;
+            const filePath = `public/${userId}/avatar.${fileExt}`;
             const publicUrl = await uploadImage(profileImageFile, filePath);
             if (publicUrl) {
                 updatesToSave.image_url = publicUrl;
@@ -353,7 +352,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
         
         if (idCardImageFile) {
             const fileExt = idCardImageFile.name.split('.').pop();
-            const filePath = `profiles/${userId}/id_card.${fileExt}`;
+            const filePath = `private/${userId}/id_card.${fileExt}`;
             const publicUrl = await uploadImage(idCardImageFile, filePath);
             if (publicUrl) {
                 (updatesToSave as HomeServicePartner).id_card_image_url = publicUrl;
@@ -366,7 +365,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
             const newImageUrls: string[] = [];
             for (const file of galleryImageFiles) {
                 const fileName = `gallery_${Date.now()}_${Math.floor(Math.random() * 1000)}.${file.name.split('.').pop()}`;
-                const filePath = `profiles/${userId}/${fileName}`;
+                const filePath = `public/${userId}/${fileName}`;
                 const publicUrl = await uploadImage(file, filePath);
                 if (publicUrl) {
                     newImageUrls.push(publicUrl);
@@ -426,7 +425,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                     aspectRatio="square"
                 />
                  
-                {/* FIX: Conditionally render Home Service specific fields for type safety. */}
                 {formData.sub_type === SubType.HomeService && (
                 <>
                   {formData.id_card_image_url ? (
