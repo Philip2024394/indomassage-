@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
-import ProfileDashboard from './components/ProfileDashboard';
+import TherapistDashboard from './components/TherapistDashboard';
+import PlaceDashboard from './components/PlaceDashboard';
 import { SubType, Partner, HomeServicePartner } from './types';
 import { initialFormData } from './components/ProfileForm';
 import SelectionScreen from './components/SelectionScreen';
@@ -43,10 +44,10 @@ const LoadingScreen: React.FC = () => (
     </div>
 );
 
-const AuthScreen: React.FC<{ supabase: any }> = ({ supabase }) => (
+const AuthScreen: React.FC<{ supabase: any, initialSubType: SubType | null, onBack: () => void }> = ({ supabase, initialSubType, onBack }) => (
      <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
         <div className="w-full h-screen">
-            <Auth supabase={supabase} />
+            <Auth supabase={supabase} initialSubType={initialSubType} onBack={onBack} />
         </div>
     </div>
 );
@@ -74,9 +75,8 @@ const App: React.FC = () => {
   const [profile, setProfile] = useState<Partner | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
+  const [authFlow, setAuthFlow] = useState<{ mode: 'welcome' | 'auth', subType: SubType | null }>({ mode: 'welcome', subType: null });
   const [publicProfileId, setPublicProfileId] = useState<string | null>(null);
-  const [devLoginAttempted, setDevLoginAttempted] = useState(false);
   
   const initializeApp = async () => {
       setConnectionError(null);
@@ -130,7 +130,55 @@ const App: React.FC = () => {
     // Successful sign-in is handled by onAuthStateChange
   };
 
+  const handleCreateProfile = async (subType: SubType) => {
+    if (!session?.user) return;
+    setLoading(true);
 
+    let headerImageUrl = '';
+    if (subType === SubType.HomeService) {
+        const { count, error: countError } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('sub_type', SubType.HomeService);
+        
+        let nextImageIndex = 0;
+        if (!countError && count) {
+            nextImageIndex = count % HOME_SERVICE_HEADER_IMAGES.length;
+        }
+        headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
+    } else {
+        headerImageUrl = 'https://ik.imagekit.io/7grri5v7d/massage%20image%201.png?updatedAt=1760186885261';
+    }
+    
+    const newProfileData = {
+        ...initialFormData(),
+        user_id: session.user.id,
+        name: subType === SubType.HomeService ? 'New Therapist' : 'New Massage Place',
+        sub_type: subType,
+        header_image_url: headerImageUrl,
+    };
+
+    if (subType === SubType.HomeService) {
+        (newProfileData as HomeServicePartner).is_verified = false;
+        (newProfileData as HomeServicePartner).years_of_experience = 0;
+    }
+
+    const { data: insertedProfile, error: profileError } = await supabase
+        .from('profiles')
+        .insert(newProfileData)
+        .select()
+        .single();
+
+    if (profileError) {
+         console.error('Error creating profile:', profileError);
+         setConnectionError(`Failed to create your profile. Please log out and try again.`);
+    } else {
+        setProfile(insertedProfile as Partner);
+    }
+    setLoading(false);
+  };
+
+  // Effect for one-time application setup (runs only on mount)
   useEffect(() => {
     // Load the Google Maps script once.
     const scriptId = 'google-maps-script';
@@ -148,29 +196,44 @@ const App: React.FC = () => {
     
     if (profileId) {
         setPublicProfileId(profileId);
-    } else if (devAccess === 'true' && !devLoginAttempted) {
-        setDevLoginAttempted(true);
+    } else if (devAccess === 'true') {
         handleDeveloperLogin();
     } else {
         initializeApp();
     }
+  }, []);
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+  // Effect for handling authentication state changes
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
         setProfile(null);
-        setNeedsProfileSetup(false);
         
-        // Only clear public view if not navigating away from a public profile link
         if (!window.location.search.includes('profile=')) {
           setPublicProfileId(null);
         }
         
         setSession(session);
+
+        if (_event === 'SIGNED_IN' && authFlow.subType && session?.user) {
+            const { data: existingProfile } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('user_id', session.user.id)
+                .single();
+            
+            if (!existingProfile) {
+                await handleCreateProfile(authFlow.subType);
+            }
+            setAuthFlow({ mode: 'welcome', subType: null });
+        } else if (!session) {
+            setAuthFlow({ mode: 'welcome', subType: null });
+        }
     });
 
     return () => {
         authListener?.subscription.unsubscribe();
     };
-  }, [devLoginAttempted]);
+  }, [authFlow.subType]);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -182,8 +245,11 @@ const App: React.FC = () => {
           .eq('user_id', session.user.id)
           .single();
 
+        // This handles a race condition where a profile is created right after login
         if (error && error.code === 'PGRST116') {
-            setNeedsProfileSetup(true);
+             // Profile not found, but we expect it to be created. Let's wait and retry.
+             setTimeout(fetchProfile, 500);
+             return; // Exit current attempt
         } else if (error) { 
             console.error('Error fetching profile:', error);
             setConnectionError("Could not load your profile. Please check your internet connection.");
@@ -218,66 +284,13 @@ const App: React.FC = () => {
     } else if (session) {
       fetchProfile();
     } else {
-        // No session and not a public view, so we are done loading.
         setLoading(false);
     }
   }, [session, publicProfileId]);
-  
-  const handleCreateProfile = async (subType: SubType) => {
-    if (!session?.user) return;
-    setLoading(true);
-    setNeedsProfileSetup(false);
-
-    let headerImageUrl = '';
-    if (subType === SubType.HomeService) {
-        const { count, error: countError } = await supabase
-            .from('profiles')
-            .select('*', { count: 'exact', head: true })
-            .eq('sub_type', SubType.HomeService);
-        
-        let nextImageIndex = 0;
-        if (!countError && count) {
-            nextImageIndex = count % HOME_SERVICE_HEADER_IMAGES.length;
-        }
-        headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
-    } else {
-        headerImageUrl = 'https://ik.imagekit.io/7grri5v7d/massage%20image%201.png?updatedAt=1760186885261';
-    }
-    
-    const newProfileData = {
-        ...initialFormData(),
-        user_id: session.user.id,
-        name: subType === SubType.HomeService ? 'New Therapist' : 'New Massage Place',
-        sub_type: subType,
-        header_image_url: headerImageUrl,
-    };
-
-    // FIX: Explicitly set default values for columns that might be NOT NULL in the database
-    // to prevent insertion errors, especially for new user profiles.
-    if (subType === SubType.HomeService) {
-        (newProfileData as HomeServicePartner).is_verified = false;
-        (newProfileData as HomeServicePartner).years_of_experience = 0;
-    }
-
-    const { data: insertedProfile, error: profileError } = await supabase
-        .from('profiles')
-        .insert(newProfileData)
-        .select()
-        .single();
-
-    if (profileError) {
-         console.error('Error creating profile:', profileError);
-         setConnectionError(`Failed to create your profile. Please log out and try again.`);
-    } else {
-        setProfile(insertedProfile as Partner);
-    }
-    setLoading(false);
-  };
 
   const handleLogout = async () => {
     if (!supabase) return;
     setLoading(true);
-    // Clear dev access from URL on logout
     if (window.location.search.includes('dev-access')) {
         window.history.pushState({}, '', window.location.pathname);
     }
@@ -302,22 +315,39 @@ const App: React.FC = () => {
     return <PublicProfileView profile={profile} onClose={clearPublicView} isPublicView />;
   }
   
-  if (!session) return <AuthScreen supabase={supabase} />;
-  
-  if (needsProfileSetup) {
-    return (
-        <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
-            <div className="w-full h-screen">
-                <SelectionScreen onSelect={handleCreateProfile} />
+  if (!session) {
+    if (authFlow.mode === 'welcome') {
+        return (
+            <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
+                <div className="w-full h-screen">
+                    <SelectionScreen 
+                        onSelect={(subType) => setAuthFlow({ mode: 'auth', subType: subType })}
+                        onLoginClick={() => setAuthFlow({ mode: 'auth', subType: null })}
+                    />
+                </div>
             </div>
-        </div>
-    );
+        );
+    }
+    return <AuthScreen 
+              supabase={supabase} 
+              initialSubType={authFlow.subType} 
+              onBack={() => setAuthFlow({ mode: 'welcome', subType: null })} 
+            />;
   }
-
+  
   if (profile) {
+    const dashboardProps = {
+      profile: profile,
+      onLogout: handleLogout,
+      supabase: supabase,
+    };
     return (
       <div className="bg-black min-h-screen font-['Inter',_sans-serif]">
-        <ProfileDashboard profile={profile} onLogout={handleLogout} supabase={supabase} />
+        {profile.sub_type === SubType.HomeService ? (
+            <TherapistDashboard {...dashboardProps} />
+        ) : (
+            <PlaceDashboard {...dashboardProps} />
+        )}
       </div>
     );
   }

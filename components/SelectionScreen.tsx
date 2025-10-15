@@ -1,11 +1,12 @@
 import React from 'react';
 import { SubType } from '../types';
 
-interface SelectionScreenProps {
+interface WelcomeScreenProps {
     onSelect: (type: SubType) => void;
+    onLoginClick: () => void;
 }
 
-const SelectionScreen: React.FC<SelectionScreenProps> = ({ onSelect }) => {
+const SelectionScreen: React.FC<WelcomeScreenProps> = ({ onSelect, onLoginClick }) => {
     return (
         <div
             className="flex-1 flex flex-col justify-center items-center p-6 h-full bg-cover bg-center relative"
@@ -20,9 +21,12 @@ const SelectionScreen: React.FC<SelectionScreenProps> = ({ onSelect }) => {
                     <p className="text-slate-400 mt-2">Massage Members Hub</p>
                 </div>
                 <div className="w-full max-w-md flex flex-col space-y-6">
-                    <h2 className="text-lg font-semibold text-slate-200 text-center">
-                        I am a...
-                    </h2>
+                    <div className="text-center">
+                        <h2 className="text-xl font-bold text-white">
+                            Join the Hub
+                        </h2>
+                        <p className="text-slate-300 mt-2">First, tell us what you do.</p>
+                    </div>
                     <SelectionCard
                         title="Massage Therapist"
                         description="I offer home services."
@@ -33,6 +37,14 @@ const SelectionScreen: React.FC<SelectionScreenProps> = ({ onSelect }) => {
                         description="I manage a business / spa location."
                         onClick={() => onSelect(SubType.Place)}
                     />
+                </div>
+                <div className="mt-8 text-center">
+                    <button 
+                        onClick={onLoginClick} 
+                        className="text-sm text-orange-500 hover:underline"
+                    >
+                        Already have an account? Sign In
+                    </button>
                 </div>
             </div>
         </div>

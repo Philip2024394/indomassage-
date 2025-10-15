@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
+import { SubType } from '../types';
 import Button from './Button';
 import Input from './Input';
 
 interface AuthProps {
   supabase: any;
+  initialSubType: SubType | null;
+  onBack: () => void;
 }
 
-const Auth: React.FC<AuthProps> = ({ supabase }) => {
+const Auth: React.FC<AuthProps> = ({ supabase, initialSubType, onBack }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(!!initialSubType);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -53,6 +56,25 @@ const Auth: React.FC<AuthProps> = ({ supabase }) => {
   const togglePasswordVisibility = () => {
     setIsPasswordVisible(prevState => !prevState);
   };
+  
+  const handleToggleMode = () => {
+    setError(null);
+    setMessage(null);
+    if (isSignUp) {
+        // If they were signing up and want to sign in
+        setIsSignUp(false);
+    } else {
+        // If they were signing in and want to sign up, send them back to choose a role
+        onBack();
+    }
+  };
+
+  const BackButton = () => (
+    <button onClick={onBack} className="absolute top-4 left-4 flex items-center gap-2 px-3 py-2 text-sm font-semibold bg-black/40 text-white rounded-full backdrop-blur-md hover:bg-white/20 transition-colors z-20">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" /></svg>
+        <span>Back</span>
+    </button>
+  );
 
   return (
     <div
@@ -60,6 +82,7 @@ const Auth: React.FC<AuthProps> = ({ supabase }) => {
       style={{ backgroundImage: `url('https://ik.imagekit.io/7grri5v7d/indo%20street%20massage.png?updatedAt=1760119669463')` }}
     >
       <div className="absolute inset-0 bg-black/60 z-0" />
+      <BackButton />
       
       <div className="relative z-10 w-full flex flex-col items-center">
         <div className="w-full text-center mb-10">
@@ -75,7 +98,9 @@ const Auth: React.FC<AuthProps> = ({ supabase }) => {
           
           <form onSubmit={handleSubmit} className="w-full space-y-6">
             <h2 className="text-2xl font-semibold text-center text-white">
-              {isSignUp ? 'Create Your Account' : 'Member Sign In'}
+              {isSignUp 
+                ? `Create ${initialSubType === SubType.HomeService ? 'Therapist' : 'Place'} Account` 
+                : 'Member Sign In'}
             </h2>
             
             <Input 
@@ -106,11 +131,7 @@ const Auth: React.FC<AuthProps> = ({ supabase }) => {
 
           <div className="mt-6 text-center">
             <button 
-                onClick={() => {
-                    setIsSignUp(!isSignUp);
-                    setError(null);
-                    setMessage(null);
-                }}
+                onClick={handleToggleMode}
                 className="text-sm text-orange-500 hover:underline disabled:opacity-50"
                 disabled={loading}
             >
