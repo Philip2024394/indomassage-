@@ -3,8 +3,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import Input from './Input';
 import Button from './Button';
 
-// FIX: Declare google on the window object to resolve TypeScript errors
-// for the Google Maps script loaded externally.
 declare global {
   interface Window {
     google: any;
@@ -19,11 +17,8 @@ interface LocationInputProps {
 
 const LocationInput: React.FC<LocationInputProps> = ({ label, onLocationSelect, initialValue = '' }) => {
   const [inputValue, setInputValue] = useState(initialValue);
-  // FIX: Use 'any' type for suggestions to avoid missing google namespace error.
   const [suggestions, setSuggestions] = useState<any[]>([]);
-  // FIX: Use 'any' type for AutocompleteService to avoid missing google namespace error.
   const autocompleteService = useRef<any | null>(null);
-  // FIX: Use 'any' type for Geocoder to avoid missing google namespace error.
   const geocoder = useRef<any | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -54,7 +49,6 @@ const LocationInput: React.FC<LocationInputProps> = ({ label, onLocationSelect, 
     }
   };
 
-  // FIX: Use 'any' type for prediction to avoid missing google namespace error.
   const handleSelectSuggestion = (prediction: any) => {
     setInputValue(prediction.description);
     onLocationSelect(prediction.description);

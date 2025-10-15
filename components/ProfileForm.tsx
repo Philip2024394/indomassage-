@@ -132,8 +132,7 @@ const GalleryManager: React.FC<{
         const files = Array.from(e.target.files || []);
         if (files.length > 0) {
             onNewFilesSelected(files);
-            // FIX: Explicitly cast 'file' to Blob to resolve TypeScript error where 'file'
-            // is inferred as 'unknown', which is not assignable to createObjectURL's parameter.
+            // FIX: Add type assertion to resolve `unknown` type error on `file`.
             const newPreviews = files.map(file => URL.createObjectURL(file as Blob));
             setPreviews(prev => [...prev, ...newPreviews]);
         }
@@ -195,26 +194,22 @@ const GalleryManager: React.FC<{
 
 const MASSAGE_TYPES_OPTIONS = ["Balinese Massage", "Deep Tissue", "Reflexology", "Aromatherapy", "Hot Stone", "Shiatsu", "Thai Massage", "Swedish Massage"];
 
-export const initialFormData = (): Omit<Partner, 'sub_type' | 'user_id' | 'id' | 'name' | 'header_image_url'> => {
-    return {
-        type: 'massage' as const,
-        location: '',
-        status: Status.Offline,
-        image_url: '',
-        whatsapp: '',
-        bio: '',
-        massage_types: [],
-        prices: [
-            { duration: 60, price: 0 },
-            { duration: 90, price: 0 },
-            { duration: 120, price: 0 },
-        ],
-        booked_dates: [],
-        gallery_image_urls: [],
-        // FIX: Removed properties specific to HomeServicePartner to make this function generic for all partner types.
-        // The optional properties will be initialized as undefined, which is handled in the form.
-    };
-};
+export const initialFormData = (): Omit<Partner, 'sub_type' | 'user_id' | 'id' | 'name' | 'header_image_url'> => ({
+    type: 'massage' as const,
+    location: '',
+    status: Status.Offline,
+    image_url: '',
+    whatsapp: '',
+    bio: '',
+    massage_types: [],
+    prices: [
+        { duration: 60, price: 0 },
+        { duration: 90, price: 0 },
+        { duration: 120, price: 0 },
+    ],
+    booked_dates: [],
+    gallery_image_urls: [],
+});
 
 
 const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supabase }) => {
