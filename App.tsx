@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import ProfileDashboard from './components/ProfileDashboard';
@@ -174,6 +175,30 @@ const App: React.FC = () => {
         setProfile(insertedProfile as Partner);
     }
     setLoading(false);
+  };
+
+  const handleProfileUpdate = async (updates: Partial<Partner>): Promise<boolean> => {
+      if (!profile) return false;
+  
+      // Optimistically update the state in App.tsx to provide instant UI feedback
+      const newProfile = { ...profile, ...updates };
+      setProfile(newProfile);
+  
+      const { error } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('user_id', profile.user_id);
+  
+      if (error) {
+          console.error("Failed to update profile in Supabase:", error);
+          // If the database update fails, revert the UI to the original state
+          setProfile(profile); 
+          alert("Failed to save changes. Please check your connection and try again.");
+          return false;
+      }
+      
+      // The state is already updated, so we just return success
+      return true;
   };
 
   // Effect for one-time application setup (runs only on mount)
@@ -364,6 +389,7 @@ const App: React.FC = () => {
           onLogout={handleLogout}
           supabase={supabase}
           headerImages={HOME_SERVICE_HEADER_IMAGES}
+          onProfileUpdate={handleProfileUpdate}
         />
       </div>
     );

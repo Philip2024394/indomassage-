@@ -4,11 +4,12 @@ import { SubType, Status, Partner, Price, HomeServicePartner } from '../types';
 import Input from './Input';
 import Button from './Button';
 import LocationInput from './LocationInput';
+import ConfirmationModal from './ConfirmationModal';
 
 
 interface ProfileFormProps {
   profile: Partner;
-  onSave: (data: Partial<Partner>) => void;
+  onSave: (data: Partial<Partner>) => Promise<boolean>;
   onBack: () => void;
   supabase: any; // Add supabase client prop
   headerImages: string[];
@@ -239,6 +240,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
   const [formData, setFormData] = useState<Partner>(profile);
   const [termsAccepted, setTermsAccepted] = useState(true); // Default to true for existing users
   const [isSaving, setIsSaving] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
   const [idCardImageFile, setIdCardImageFile] = useState<File | null>(null);
@@ -248,7 +250,8 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
   const isHomeService = formData.sub_type === SubType.HomeService;
 
   useEffect(() => {
-    // Normalize profile data on load, especially for Home Service pricing
+    // This effect syncs the form's state with the profile prop from the parent.
+    // This is crucial for ensuring the form displays the latest data after a save.
     const profileData = { ...profile };
     if (profileData.sub_type === SubType.HomeService) {
       const basePrices: Price[] = [
@@ -258,9 +261,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
       ];
 
       const normalizedPrices = basePrices.map(basePrice => {
-        // Find if a price for this duration already exists in the profile data
         const existingPrice = profile.prices?.find(p => p.duration === basePrice.duration);
-        // If it exists, use it. Otherwise, use the base price (with price 0).
         return existingPrice || basePrice;
       });
 
@@ -349,7 +350,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
     };
 
     try {
-        // FIX: Reliably get the current user's ID to prevent RLS policy violations.
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
             throw new Error("User not authenticated. Please log in again.");
@@ -368,7 +368,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
             }
         }
         
-        // Upload header image if a new one was selected (and user is not Home Service)
         if (headerImageFile && !isHomeService) {
             const fileExt = headerImageFile.name.split('.').pop();
             const filePath = `${userId}/header.${fileExt}`;
@@ -380,7 +379,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
             }
         }
 
-        // Upload ID card if a new one was selected
         if (idCardImageFile && isHomeService) {
             const fileExt = idCardImageFile.name.split('.').pop();
             const filePath = `${userId}/id_card.${fileExt}`;
@@ -392,11 +390,9 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
             }
         }
         
-        // Upload new gallery images
         if (galleryImageFiles.length > 0) {
             const newImageUrls: string[] = [];
             for (const file of galleryImageFiles) {
-                // Create a unique filename for each gallery image
                 const fileName = `gallery_${Date.now()}_${Math.floor(Math.random() * 1000)}.${file.name.split('.').pop()}`;
                 const filePath = `${userId}/${fileName}`;
                 const publicUrl = await uploadImage(file, filePath);
@@ -404,22 +400,22 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                     newImageUrls.push(publicUrl);
                 }
             }
-            // Combine existing URLs (after potential deletions) with new ones
             updatesToSave.gallery_image_urls = [...(formData.gallery_image_urls || []), ...newImageUrls];
         }
 
 
-        // Call the parent onSave function with the final data (including new image URLs)
-        await onSave(updatesToSave);
+        // Call the parent onSave function, which now returns a success boolean
+        const success = await onSave(updatesToSave);
 
-        // Reset file state after successful save
-        setProfileImageFile(null);
-        setIdCardImageFile(null);
-        setGalleryImageFiles([]);
-        setHeaderImageFile(null);
-
-        alert('Profile saved successfully!');
-        onBack(); // Go back to the dashboard
+        if (success) {
+            // Reset file state only on successful save
+            setProfileImageFile(null);
+            setIdCardImageFile(null);
+            setGalleryImageFiles([]);
+            setHeaderImageFile(null);
+            setShowSuccessModal(true);
+        }
+        // If not successful, the parent handler will show an alert.
 
     } catch (error: any) {
         console.error('Save process failed:', error);
@@ -428,144 +424,157 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
         setIsSaving(false);
     }
   };
+
+  const handleModalClose = () => {
+    setShowSuccessModal(false);
+    onBack();
+  };
   
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
-        <button type="button" onClick={onBack} className="text-sm text-orange-500 hover:underline mb-4 flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" /></svg>
-            Back to Dashboard
-        </button>
-
-        <FormSection title={isHomeService ? "Therapist Information" : "Business Information"}>
-            <Input name="name" label={isHomeService ? "Full Name" : "Business Name"} value={formData.name} onChange={handleChange} required/>
-            <ImageUpload 
-                label={isHomeService ? "Profile Picture" : "Logo / Main Picture"} 
-                value={formData.image_url || ''} 
-                onImageChange={setProfileImageFile} 
-                helpText={isHomeService ? "Upload a clear headshot." : "Upload your business logo or a high-quality photo of your establishment."}
-                aspectRatio="square"
+    <>
+        {showSuccessModal && (
+            <ConfirmationModal 
+                message="Your profile has been updated successfully."
+                onClose={handleModalClose}
             />
-             {!isHomeService && (
-                <ImageUpload 
-                    label="Header Image" 
-                    value={formData.header_image_url || ''} 
-                    onImageChange={setHeaderImageFile} 
-                    helpText="This is the banner image on your profile (16:9 ratio recommended)."
-                    aspectRatio="wide"
-                />
-             )}
-            
-            {isHomeService && (
-              <>
-                {(formData as HomeServicePartner).id_card_image_url ? (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Indonesian ID Card (KTP)</label>
-                    <div className="flex items-center gap-3 p-4 bg-gray-800/80 rounded-lg text-slate-300 text-sm">
-                      <CheckCircleIcon />
-                      <span>ID card has been submitted for verification.</span>
-                    </div>
-                  </div>
-                ) : (
-                  <ImageUpload 
-                    label="Indonesian ID Card (KTP)" 
-                    value=""
-                    onImageChange={setIdCardImageFile} 
-                    helpText="This is for verification and is not public."
-                  />
-                )}
-                <Input name="years_of_experience" label="Years of Experience" type="number" value={(formData as HomeServicePartner).years_of_experience || ''} onChange={handleChange} required/>
-              </>
-            )}
-
-            {!isHomeService && (
-                <LocationInput 
-                    label="Business Location"
-                    onLocationSelect={handleLocationChange}
-                    initialValue={formData.location}
-                />
-            )}
-             <div className="relative">
-                <label htmlFor="whatsapp" className="block text-sm font-medium text-slate-300 mb-1">WhatsApp Number</label>
-                <div className="flex items-center">
-                    <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-white/20 bg-black/40 text-slate-400 text-sm">+62</span>
-                    <Input id="whatsapp" name="whatsapp" type="tel" value={formData.whatsapp} onChange={handleChange} required noLabel className="rounded-l-none"/>
-                </div>
-            </div>
-            
-            <div>
-              <label htmlFor="bio" className="block text-sm font-medium text-slate-300 mb-1">Bio / Description</label>
-              <textarea name="bio" id="bio" rows={4} value={formData.bio} onChange={handleChange} maxLength={250} className="w-full px-3 py-2 bg-black/30 backdrop-blur-sm border border-white/20 text-slate-100 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all placeholder:text-slate-400" required></textarea>
-              <p className="text-right text-xs text-slate-500 mt-1">{(formData.bio || '').length} / 250</p>
-            </div>
-        </FormSection>
-        
-        {!isHomeService && (
-            <FormSection title="Gallery Manager">
-                <GalleryManager 
-                    existingImageUrls={formData.gallery_image_urls || []}
-                    onNewFilesSelected={setGalleryImageFiles}
-                    onDeleteExistingImage={handleDeleteGalleryImage}
-                />
-            </FormSection>
         )}
+        <form onSubmit={handleSubmit} className="space-y-8">
+            <button type="button" onClick={onBack} className="text-sm text-orange-500 hover:underline mb-4 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z" clipRule="evenodd" /></svg>
+                Back to Dashboard
+            </button>
 
-        <FormSection title="Services & Pricing">
-            <MultiSelectDropdown 
-                label="Massage Types Offered"
-                options={MASSAGE_TYPES_OPTIONS}
-                selectedOptions={formData.massage_types || []}
-                onSelectionChange={(selection) => setFormData(p => ({...p, massage_types: selection} as Partner))}
-            />
-             <div className="flex justify-between items-center pt-4">
-                <h3 className="text-md font-semibold text-slate-200">Prices</h3>
-                {!isHomeService && (
-                    <Button type="button" onClick={handleAddPrice} variant="secondary">Add Price</Button>
+            <FormSection title={isHomeService ? "Therapist Information" : "Business Information"}>
+                <Input name="name" label={isHomeService ? "Full Name" : "Business Name"} value={formData.name} onChange={handleChange} required/>
+                <ImageUpload 
+                    label={isHomeService ? "Profile Picture" : "Logo / Main Picture"} 
+                    value={formData.image_url || ''} 
+                    onImageChange={setProfileImageFile} 
+                    helpText={isHomeService ? "Upload a clear headshot." : "Upload your business logo or a high-quality photo of your establishment."}
+                    aspectRatio="square"
+                />
+                 {!isHomeService && (
+                    <ImageUpload 
+                        label="Header Image" 
+                        value={formData.header_image_url || ''} 
+                        onImageChange={setHeaderImageFile} 
+                        helpText="This is the banner image on your profile (16:9 ratio recommended)."
+                        aspectRatio="wide"
+                    />
+                 )}
+                
+                {isHomeService && (
+                  <>
+                    {(formData as HomeServicePartner).id_card_image_url ? (
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Indonesian ID Card (KTP)</label>
+                        <div className="flex items-center gap-3 p-4 bg-gray-800/80 rounded-lg text-slate-300 text-sm">
+                          <CheckCircleIcon />
+                          <span>ID card has been submitted for verification.</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <ImageUpload 
+                        label="Indonesian ID Card (KTP)" 
+                        value=""
+                        onImageChange={setIdCardImageFile} 
+                        helpText="This is for verification and is not public."
+                      />
+                    )}
+                    <Input name="years_of_experience" label="Years of Experience" type="number" value={(formData as HomeServicePartner).years_of_experience || ''} onChange={handleChange} required/>
+                  </>
                 )}
-            </div>
-             <p className="text-xs text-slate-500 -mt-1 mb-3">Set your prices in thousands of Rupiah (e.g., enter 150 for Rp 150k).</p>
-             <div className="space-y-4">
-                {(formData.prices || []).map((price, index) => (
-                    <div key={index} className="flex items-end gap-2 p-3 bg-gray-800/50 rounded-lg">
-                        <div className="flex-1">
-                            <Input 
-                                label={`Duration (mins)`}
-                                type="number"
-                                placeholder="e.g., 60"
-                                value={price.duration || ''}
-                                onChange={e => handlePriceChange(index, 'duration', e.target.value)}
-                                disabled={isHomeService}
-                            />
-                        </div>
-                        <div className="flex-1 relative">
-                            <Input 
-                                label={`Price`}
-                                type="number"
-                                placeholder="e.g., 150"
-                                value={price.price > 0 ? price.price / 1000 : ''}
-                                onChange={e => handlePriceChange(index, 'price', e.target.value)}
-                            />
-                             <span className="absolute right-3 bottom-2.5 text-slate-400">k</span>
-                        </div>
-                        {!isHomeService && (
-                            <button type="button" onClick={() => handleRemovePrice(index)} className="p-3 bg-red-600/20 text-red-400 rounded-md hover:bg-red-600/40">
-                                <TrashIcon />
-                            </button>
-                        )}
+
+                {!isHomeService && (
+                    <LocationInput 
+                        label="Business Location"
+                        onLocationSelect={handleLocationChange}
+                        initialValue={formData.location}
+                    />
+                )}
+                 <div className="relative">
+                    <label htmlFor="whatsapp" className="block text-sm font-medium text-slate-300 mb-1">WhatsApp Number</label>
+                    <div className="flex items-center">
+                        <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-white/20 bg-black/40 text-slate-400 text-sm">+62</span>
+                        <Input id="whatsapp" name="whatsapp" type="tel" value={formData.whatsapp} onChange={handleChange} required noLabel className="rounded-l-none"/>
                     </div>
-                ))}
-             </div>
-        </FormSection>
-        
-        <div className="pt-2 pb-12 space-y-6">
-            <Checkbox id="terms" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)}>
-                I understand that I am fully responsible for my own services, government fees, or taxes. 
-                This platform is only a directory for traffic and does not get involved in any disputes, client issues, or payments.
-            </Checkbox>
-            <Button type="submit" fullWidth disabled={!termsAccepted || isSaving}>
-                {isSaving ? 'Saving...' : 'Save Profile'}
-            </Button>
-        </div>
-    </form>
+                </div>
+                
+                <div>
+                  <label htmlFor="bio" className="block text-sm font-medium text-slate-300 mb-1">Bio / Description</label>
+                  <textarea name="bio" id="bio" rows={4} value={formData.bio} onChange={handleChange} maxLength={250} className="w-full px-3 py-2 bg-black/30 backdrop-blur-sm border border-white/20 text-slate-100 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all placeholder:text-slate-400" required></textarea>
+                  <p className="text-right text-xs text-slate-500 mt-1">{(formData.bio || '').length} / 250</p>
+                </div>
+            </FormSection>
+            
+            {!isHomeService && (
+                <FormSection title="Gallery Manager">
+                    <GalleryManager 
+                        existingImageUrls={formData.gallery_image_urls || []}
+                        onNewFilesSelected={setGalleryImageFiles}
+                        onDeleteExistingImage={handleDeleteGalleryImage}
+                    />
+                </FormSection>
+            )}
+
+            <FormSection title="Services & Pricing">
+                <MultiSelectDropdown 
+                    label="Massage Types Offered"
+                    options={MASSAGE_TYPES_OPTIONS}
+                    selectedOptions={formData.massage_types || []}
+                    onSelectionChange={(selection) => setFormData(p => ({...p, massage_types: selection} as Partner))}
+                />
+                 <div className="flex justify-between items-center pt-4">
+                    <h3 className="text-md font-semibold text-slate-200">Prices</h3>
+                    {!isHomeService && (
+                        <Button type="button" onClick={handleAddPrice} variant="secondary">Add Price</Button>
+                    )}
+                </div>
+                 <p className="text-xs text-slate-500 -mt-1 mb-3">Set your prices in thousands of Rupiah (e.g., enter 150 for Rp 150k).</p>
+                 <div className="space-y-4">
+                    {(formData.prices || []).map((price, index) => (
+                        <div key={index} className="flex items-end gap-2 p-3 bg-gray-800/50 rounded-lg">
+                            <div className="flex-1">
+                                <Input 
+                                    label={`Duration (mins)`}
+                                    type="number"
+                                    placeholder="e.g., 60"
+                                    value={price.duration || ''}
+                                    onChange={e => handlePriceChange(index, 'duration', e.target.value)}
+                                    disabled={isHomeService}
+                                />
+                            </div>
+                            <div className="flex-1 relative">
+                                <Input 
+                                    label={`Price`}
+                                    type="number"
+                                    placeholder="e.g., 150"
+                                    value={price.price > 0 ? price.price / 1000 : ''}
+                                    onChange={e => handlePriceChange(index, 'price', e.target.value)}
+                                />
+                                 <span className="absolute right-3 bottom-2.5 text-slate-400">k</span>
+                            </div>
+                            {!isHomeService && (
+                                <button type="button" onClick={() => handleRemovePrice(index)} className="p-3 bg-red-600/20 text-red-400 rounded-md hover:bg-red-600/40">
+                                    <TrashIcon />
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                 </div>
+            </FormSection>
+            
+            <div className="pt-2 pb-12 space-y-6">
+                <Checkbox id="terms" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)}>
+                    I understand that I am fully responsible for my own services, government fees, or taxes. 
+                    This platform is only a directory for traffic and does not get involved in any disputes, client issues, or payments.
+                </Checkbox>
+                <Button type="submit" fullWidth disabled={!termsAccepted || isSaving}>
+                    {isSaving ? 'Saving...' : 'Save Profile'}
+                </Button>
+            </div>
+        </form>
+    </>
   )
 };
 

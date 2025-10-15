@@ -1,5 +1,6 @@
 
-import React, { useCallback, useState } from 'react';
+
+import React, { useCallback, useState, useEffect } from 'react';
 import { SubType, Partner, Status, HomeServicePartner } from '../types';
 import ProfileForm from './ProfileForm';
 import Button from './Button';
@@ -12,6 +13,7 @@ interface ProfileDashboardProps {
   profile: Partner;
   supabase: any;
   headerImages: string[];
+  onProfileUpdate: (updates: Partial<Partner>) => Promise<boolean>;
 }
 
 const mockStats = {
@@ -235,31 +237,24 @@ const Earnings: React.FC = () => {
 
 type ActiveView = 'home' | 'earnings' | 'history' | 'profile';
 
-const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: initialProfile, supabase, headerImages }) => {
+const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile, supabase, headerImages, onProfileUpdate }) => {
   const [activeView, setActiveView] = useState<ActiveView>('home');
-  const [profile, setProfile] = useState<Partner>(initialProfile);
-  const [bookedDates, setBookedDates] = useState<string[]>(initialProfile.booked_dates || []);
+  const [bookedDates, setBookedDates] = useState<string[]>(profile.booked_dates || []);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  
+  useEffect(() => {
+    // Keep the local bookedDates state in sync with the profile prop from App.tsx
+    setBookedDates(profile.booked_dates || []);
+  }, [profile.booked_dates]);
 
-  const handleProfileUpdate = async (updates: Partial<Partner>) => {
-    const newProfile = { ...profile, ...updates };
-    setProfile(newProfile); // Optimistic update
 
-    const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('user_id', profile.user_id);
-
-    if (error) {
-        console.error("Failed to update profile:", error);
-        setProfile(profile); // Revert on error
-        alert("Failed to update profile. Please try again.");
+  const handleBookedDatesChange = async (newDates: string[]) => {
+    setBookedDates(newDates); // Optimistic update for faster UI response in the calendar
+    const success = await onProfileUpdate({ booked_dates: newDates });
+    if (!success) {
+      // If the save fails, revert to the original state from props
+      setBookedDates(profile.booked_dates || []);
     }
-  };
-
-  const handleBookedDatesChange = (newDates: string[]) => {
-    setBookedDates(newDates);
-    handleProfileUpdate({ booked_dates: newDates });
   };
 
   const handleBackToHome = () => {
@@ -269,9 +264,9 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: 
   const renderContent = () => {
     switch(activeView) {
       case 'home':
-        return <UserStatusControl profile={profile} onProfileUpdate={handleProfileUpdate} />
+        return <UserStatusControl profile={profile} onProfileUpdate={onProfileUpdate} />
       case 'profile':
-        return <ProfileForm profile={profile} onSave={handleProfileUpdate} onBack={handleBackToHome} supabase={supabase} headerImages={headerImages} />;
+        return <ProfileForm profile={profile} onSave={onProfileUpdate} onBack={handleBackToHome} supabase={supabase} headerImages={headerImages} />;
       case 'earnings':
         return <Earnings />;
       case 'history':
