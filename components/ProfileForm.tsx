@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { SubType, Status, Partner, Price, HomeServicePartner } from '../types';
 import Input from './Input';
@@ -10,6 +11,7 @@ interface ProfileFormProps {
   onSave: (data: Partial<Partner>) => void;
   onBack: () => void;
   supabase: any; // Add supabase client prop
+  headerImages: string[];
 }
 
 // Checkbox Component
@@ -34,8 +36,9 @@ interface ImageUploadProps {
   value: string;
   onImageChange: (file: File) => void;
   helpText?: string;
+  aspectRatio?: 'square' | 'wide';
 }
-const ImageUpload: React.FC<ImageUploadProps> = ({ label, value, onImageChange, helpText }) => {
+const ImageUpload: React.FC<ImageUploadProps> = ({ label, value, onImageChange, helpText, aspectRatio = 'square' }) => {
   const [previewUrl, setPreviewUrl] = useState(value);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,14 +56,17 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ label, value, onImageChange, 
     }
   };
 
+  const aspectClass = aspectRatio === 'wide' ? 'aspect-video w-full' : 'aspect-square w-24 h-24';
+  const containerClass = aspectRatio === 'wide' ? 'w-full' : 'flex items-center gap-4';
+  
   return (
     <div>
       <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
-      <div className="flex items-center gap-4">
-        <div className="w-24 h-24 rounded-lg bg-black/30 border-2 border-dashed border-white/20 flex items-center justify-center overflow-hidden">
+      <div className={containerClass}>
+        <div className={`${aspectClass} rounded-lg bg-black/30 border-2 border-dashed border-white/20 flex items-center justify-center overflow-hidden`}>
           {previewUrl ? <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" /> : <CameraIcon />}
         </div>
-        <div>
+        <div className={aspectRatio === 'wide' ? 'mt-2' : ''}>
           <button type="button" onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-gray-700 text-slate-200 text-sm font-semibold rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-black focus:ring-orange-500">Choose File</button>
           <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="image/png, image/jpeg, image/jpg" />
           {helpText && <p className="text-xs text-slate-500 mt-2">{helpText}</p>}
@@ -192,7 +198,24 @@ const GalleryManager: React.FC<{
 
 // --- Main Profile Form Component ---
 
-const MASSAGE_TYPES_OPTIONS = ["Balinese Massage", "Deep Tissue", "Reflexology", "Aromatherapy", "Hot Stone", "Shiatsu", "Thai Massage", "Swedish Massage"];
+const MASSAGE_TYPES_OPTIONS = [
+    "Aromatherapy Massage",
+    "Balinese Massage",
+    "Deep Tissue Massage",
+    "Hot Stone Massage",
+    "Javanese Pijat",
+    "Myofascial Release",
+    "Pijat Urat",
+    "Reflexology",
+    "Sasak Massage",
+    "Shiatsu",
+    "Sports Massage",
+    "Swedish Massage",
+    "Thai Foot Massage",
+    "Thai Herbal Massage",
+    "Thai Massage",
+    "Trigger Point Therapy",
+];
 
 export const initialFormData = (): Omit<Partner, 'sub_type' | 'user_id' | 'id' | 'name' | 'header_image_url'> => ({
     type: 'massage' as const,
@@ -212,11 +235,12 @@ export const initialFormData = (): Omit<Partner, 'sub_type' | 'user_id' | 'id' |
 });
 
 
-const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supabase }) => {
+const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supabase, headerImages }) => {
   const [formData, setFormData] = useState<Partner>(profile);
   const [termsAccepted, setTermsAccepted] = useState(true); // Default to true for existing users
   const [isSaving, setIsSaving] = useState(false);
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [headerImageFile, setHeaderImageFile] = useState<File | null>(null);
   const [idCardImageFile, setIdCardImageFile] = useState<File | null>(null);
   const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
 
@@ -224,7 +248,25 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
   const isHomeService = formData.sub_type === SubType.HomeService;
 
   useEffect(() => {
-    setFormData(profile);
+    // Normalize profile data on load, especially for Home Service pricing
+    const profileData = { ...profile };
+    if (profileData.sub_type === SubType.HomeService) {
+      const basePrices: Price[] = [
+        { duration: 60, price: 0 },
+        { duration: 90, price: 0 },
+        { duration: 120, price: 0 },
+      ];
+
+      const normalizedPrices = basePrices.map(basePrice => {
+        // Find if a price for this duration already exists in the profile data
+        const existingPrice = profile.prices?.find(p => p.duration === basePrice.duration);
+        // If it exists, use it. Otherwise, use the base price (with price 0).
+        return existingPrice || basePrice;
+      });
+
+      profileData.prices = normalizedPrices;
+    }
+    setFormData(profileData);
   }, [profile]);
 
 
@@ -234,15 +276,34 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
     setFormData(prev => ({ ...prev, [name]: isNumber ? parseFloat(value) || 0 : value } as Partner));
   };
   
-  const handlePriceChange = (index: number, value: string) => {
+  const handlePriceChange = (index: number, field: 'duration' | 'price', value: string) => {
     const cleanValue = value.replace(/[^0-9]/g, '');
-    const newPrice = (parseInt(cleanValue, 10) || 0) * 1000;
+    let numericValue = parseInt(cleanValue, 10) || 0;
+    
+    if (field === 'price') {
+        numericValue *= 1000;
+    }
+
     const updatedPrices = [...(formData.prices || [])];
     if (updatedPrices[index]) {
-        updatedPrices[index] = { ...updatedPrices[index], price: newPrice };
+        updatedPrices[index] = { ...updatedPrices[index], [field]: numericValue };
         setFormData(prev => ({ ...prev, prices: updatedPrices } as Partner));
     }
   };
+  
+  const handleAddPrice = () => {
+    setFormData(prev => ({
+        ...prev,
+        prices: [...(prev.prices || []), { duration: 0, price: 0 }]
+    } as Partner));
+  };
+
+  const handleRemovePrice = (index: number) => {
+    const updatedPrices = [...(formData.prices || [])];
+    updatedPrices.splice(index, 1);
+    setFormData(prev => ({ ...prev, prices: updatedPrices } as Partner));
+  };
+
 
   const handleLocationChange = useCallback((newLocation: string) => {
     setFormData(prev => ({ ...prev, location: newLocation } as Partner));
@@ -306,6 +367,18 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                 throw new Error("Profile picture upload failed.");
             }
         }
+        
+        // Upload header image if a new one was selected (and user is not Home Service)
+        if (headerImageFile && !isHomeService) {
+            const fileExt = headerImageFile.name.split('.').pop();
+            const filePath = `${userId}/header.${fileExt}`;
+            const publicUrl = await uploadImage(headerImageFile, filePath);
+            if (publicUrl) {
+                updatesToSave.header_image_url = publicUrl;
+            } else {
+                throw new Error("Header image upload failed.");
+            }
+        }
 
         // Upload ID card if a new one was selected
         if (idCardImageFile && isHomeService) {
@@ -343,6 +416,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
         setProfileImageFile(null);
         setIdCardImageFile(null);
         setGalleryImageFiles([]);
+        setHeaderImageFile(null);
 
         alert('Profile saved successfully!');
         onBack(); // Go back to the dashboard
@@ -369,7 +443,17 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                 value={formData.image_url || ''} 
                 onImageChange={setProfileImageFile} 
                 helpText={isHomeService ? "Upload a clear headshot." : "Upload your business logo or a high-quality photo of your establishment."}
+                aspectRatio="square"
             />
+             {!isHomeService && (
+                <ImageUpload 
+                    label="Header Image" 
+                    value={formData.header_image_url || ''} 
+                    onImageChange={setHeaderImageFile} 
+                    helpText="This is the banner image on your profile (16:9 ratio recommended)."
+                    aspectRatio="wide"
+                />
+             )}
             
             {isHomeService && (
               <>
@@ -393,11 +477,13 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
               </>
             )}
 
-            <LocationInput 
-                label={isHomeService ? "Primary Operating Area" : "Business Location"}
-                onLocationSelect={handleLocationChange}
-                initialValue={formData.location}
-            />
+            {!isHomeService && (
+                <LocationInput 
+                    label="Business Location"
+                    onLocationSelect={handleLocationChange}
+                    initialValue={formData.location}
+                />
+            )}
              <div className="relative">
                 <label htmlFor="whatsapp" className="block text-sm font-medium text-slate-300 mb-1">WhatsApp Number</label>
                 <div className="flex items-center">
@@ -413,13 +499,15 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
             </div>
         </FormSection>
         
-        <FormSection title="Gallery Manager">
-            <GalleryManager 
-                existingImageUrls={formData.gallery_image_urls || []}
-                onNewFilesSelected={setGalleryImageFiles}
-                onDeleteExistingImage={handleDeleteGalleryImage}
-            />
-        </FormSection>
+        {!isHomeService && (
+            <FormSection title="Gallery Manager">
+                <GalleryManager 
+                    existingImageUrls={formData.gallery_image_urls || []}
+                    onNewFilesSelected={setGalleryImageFiles}
+                    onDeleteExistingImage={handleDeleteGalleryImage}
+                />
+            </FormSection>
+        )}
 
         <FormSection title="Services & Pricing">
             <MultiSelectDropdown 
@@ -428,20 +516,41 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                 selectedOptions={formData.massage_types || []}
                 onSelectionChange={(selection) => setFormData(p => ({...p, massage_types: selection} as Partner))}
             />
-             <h3 className="text-md font-semibold text-slate-200 pt-4">Prices</h3>
+             <div className="flex justify-between items-center pt-4">
+                <h3 className="text-md font-semibold text-slate-200">Prices</h3>
+                {!isHomeService && (
+                    <Button type="button" onClick={handleAddPrice} variant="secondary">Add Price</Button>
+                )}
+            </div>
              <p className="text-xs text-slate-500 -mt-1 mb-3">Set your prices in thousands of Rupiah (e.g., enter 150 for Rp 150k).</p>
-             <div className="space-y-3">
-                {formData.prices?.map((price, index) => (
-                    <div key={price.duration} className="relative">
-                        <Input 
-                            label={`${price.duration} min Price`}
-                            type="number"
-                            placeholder="e.g., 150"
-                            value={price.price > 0 ? price.price / 1000 : ''}
-                            onChange={e => handlePriceChange(index, e.target.value)}
-                            maxLength={3}
-                        />
-                         <span className="absolute right-3 bottom-2 text-slate-400">k</span>
+             <div className="space-y-4">
+                {(formData.prices || []).map((price, index) => (
+                    <div key={index} className="flex items-end gap-2 p-3 bg-gray-800/50 rounded-lg">
+                        <div className="flex-1">
+                            <Input 
+                                label={`Duration (mins)`}
+                                type="number"
+                                placeholder="e.g., 60"
+                                value={price.duration || ''}
+                                onChange={e => handlePriceChange(index, 'duration', e.target.value)}
+                                disabled={isHomeService}
+                            />
+                        </div>
+                        <div className="flex-1 relative">
+                            <Input 
+                                label={`Price`}
+                                type="number"
+                                placeholder="e.g., 150"
+                                value={price.price > 0 ? price.price / 1000 : ''}
+                                onChange={e => handlePriceChange(index, 'price', e.target.value)}
+                            />
+                             <span className="absolute right-3 bottom-2.5 text-slate-400">k</span>
+                        </div>
+                        {!isHomeService && (
+                            <button type="button" onClick={() => handleRemovePrice(index)} className="p-3 bg-red-600/20 text-red-400 rounded-md hover:bg-red-600/40">
+                                <TrashIcon />
+                            </button>
+                        )}
                     </div>
                 ))}
              </div>

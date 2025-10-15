@@ -1,9 +1,7 @@
 
-
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
-import TherapistDashboard from './components/TherapistDashboard';
-import PlaceDashboard from './components/PlaceDashboard';
+import ProfileDashboard from './components/ProfileDashboard';
 import { SubType, Partner, HomeServicePartner } from './types';
 import { initialFormData } from './components/ProfileForm';
 import SelectionScreen from './components/SelectionScreen';
@@ -185,7 +183,7 @@ const App: React.FC = () => {
     if (!document.getElementById(scriptId)) {
       const script = document.createElement('script');
       script.id = scriptId;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&v=weekly`;
       script.async = true;
       document.head.appendChild(script);
     }
@@ -254,7 +252,30 @@ const App: React.FC = () => {
             console.error('Error fetching profile:', error);
             setConnectionError("Could not load your profile. Please check your internet connection.");
         } else if (data) {
-            setProfile(data as Partner);
+            let profileData = data as Partner;
+            // For Home Service users, randomly update their header image on login for a dynamic feel.
+            if (profileData.sub_type === SubType.HomeService && HOME_SERVICE_HEADER_IMAGES.length > 0) {
+                const currentHeader = profileData.header_image_url;
+                let availableImages = HOME_SERVICE_HEADER_IMAGES.filter(img => img !== currentHeader);
+                if (availableImages.length === 0) {
+                    availableImages = HOME_SERVICE_HEADER_IMAGES;
+                }
+                const newHeader = availableImages[Math.floor(Math.random() * availableImages.length)];
+                
+                if (newHeader !== currentHeader) {
+                    const { error: updateError } = await supabase
+                        .from('profiles')
+                        .update({ header_image_url: newHeader })
+                        .eq('user_id', session.user.id);
+                    
+                    if (!updateError) {
+                        profileData = { ...profileData, header_image_url: newHeader };
+                    } else {
+                        console.error("Failed to update header on login:", updateError);
+                    }
+                }
+            }
+            setProfile(profileData);
         }
         setLoading(false);
       }
@@ -336,18 +357,14 @@ const App: React.FC = () => {
   }
   
   if (profile) {
-    const dashboardProps = {
-      profile: profile,
-      onLogout: handleLogout,
-      supabase: supabase,
-    };
     return (
       <div className="bg-black min-h-screen font-['Inter',_sans-serif]">
-        {profile.sub_type === SubType.HomeService ? (
-            <TherapistDashboard {...dashboardProps} />
-        ) : (
-            <PlaceDashboard {...dashboardProps} />
-        )}
+        <ProfileDashboard
+          profile={profile}
+          onLogout={handleLogout}
+          supabase={supabase}
+          headerImages={HOME_SERVICE_HEADER_IMAGES}
+        />
       </div>
     );
   }

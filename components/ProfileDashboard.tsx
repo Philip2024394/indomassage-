@@ -1,3 +1,4 @@
+
 import React, { useCallback, useState } from 'react';
 import { SubType, Partner, Status, HomeServicePartner } from '../types';
 import ProfileForm from './ProfileForm';
@@ -10,6 +11,7 @@ interface ProfileDashboardProps {
   onLogout: () => void;
   profile: Partner;
   supabase: any;
+  headerImages: string[];
 }
 
 const mockStats = {
@@ -34,7 +36,7 @@ const LocationManager: React.FC<{ lastLocation: string; onLocationSet: (location
     
     return (
         <DashboardSection title="Set Your Location">
-            <p className="text-sm text-slate-400 -mt-2 mb-6">You must set your current location to go online. This will be visible to customers until you go offline.</p>
+            <p className="text-sm text-slate-400 -mt-2 mb-6">You must set your current location to go online. Your operating area is a 50km radius from this location, which will be visible to customers until you go offline.</p>
             <LocationInput 
                 label="Current Location"
                 onLocationSelect={(loc) => {
@@ -233,7 +235,7 @@ const Earnings: React.FC = () => {
 
 type ActiveView = 'home' | 'earnings' | 'history' | 'profile';
 
-const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: initialProfile, supabase }) => {
+const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: initialProfile, supabase, headerImages }) => {
   const [activeView, setActiveView] = useState<ActiveView>('home');
   const [profile, setProfile] = useState<Partner>(initialProfile);
   const [bookedDates, setBookedDates] = useState<string[]>(initialProfile.booked_dates || []);
@@ -269,7 +271,7 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: 
       case 'home':
         return <UserStatusControl profile={profile} onProfileUpdate={handleProfileUpdate} />
       case 'profile':
-        return <ProfileForm profile={profile} onSave={handleProfileUpdate} onBack={handleBackToHome} supabase={supabase} />;
+        return <ProfileForm profile={profile} onSave={handleProfileUpdate} onBack={handleBackToHome} supabase={supabase} headerImages={headerImages} />;
       case 'earnings':
         return <Earnings />;
       case 'history':
@@ -294,33 +296,18 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: 
   );
 };
 
-const VerificationStatus: React.FC<{ profile: Partner }> = ({ profile }) => {
-  if (profile.sub_type !== SubType.HomeService) return null;
-
-  const homeServiceProfile = profile as HomeServicePartner;
-  
-  if (homeServiceProfile.is_verified) {
-    return (
-      <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-green-500/10 text-green-400 text-sm font-semibold rounded-full">
-        <CheckCircleIcon />
-        <span>Verified</span>
-      </div>
-    );
-  }
-  
-  if (homeServiceProfile.id_card_image_url) {
-    return (
-      <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-yellow-500/10 text-yellow-400 text-sm font-semibold rounded-full">
-        <ClockIcon small />
-        <span>Pending Verification</span>
-      </div>
-    );
-  }
+const StatusIndicator: React.FC<{ status: Status }> = ({ status }) => {
+  const statusInfo = {
+    [Status.Online]: { text: 'Online', color: 'bg-green-400', textColor: 'text-green-300' },
+    [Status.Offline]: { text: 'Offline', color: 'bg-slate-500', textColor: 'text-slate-400' },
+    [Status.Busy]: { text: 'Busy', color: 'bg-yellow-400', textColor: 'text-yellow-300' },
+  };
+  const currentStatus = statusInfo[status] || statusInfo[Status.Offline];
 
   return (
-    <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 text-red-400 text-sm font-semibold rounded-full">
-      <XCircleIcon />
-      <span>Not Verified</span>
+    <div className="mt-2 flex items-center justify-center gap-2 text-sm font-medium">
+      <span className={`w-2.5 h-2.5 rounded-full ${currentStatus.color} ${status === Status.Online ? 'animate-pulse' : ''}`}></span>
+      <span className={currentStatus.textColor}>{currentStatus.text}</span>
     </div>
   );
 };
@@ -338,7 +325,7 @@ const ProfileHeader: React.FC<{ profile: Partner, onPreview: () => void }> = ({ 
         <header className="relative flex flex-col items-center p-6 text-center">
             <img src={profile.image_url || `https://i.pravatar.cc/150?u=${profile.id}`} alt="Profile" className="w-24 h-24 rounded-full border-4 border-gray-800 ring-2 ring-orange-500 object-cover" />
             <h1 className="text-2xl font-bold text-white mt-4">{profile.name}</h1>
-            <VerificationStatus profile={profile} />
+            <StatusIndicator status={profile.status} />
             <div className="mt-6 w-full max-w-md mx-auto bg-gray-900/50 backdrop-blur-xl border border-gray-700/80 rounded-2xl p-4 flex justify-around">
                 <StatItem value={profile.status} label="Status" />
                 <StatItem value={'N/A'} label="Acceptance" />
@@ -414,7 +401,7 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, view, activeView, onClic
 // --- ICONS ---
 const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M11.47 3.841a.75.75 0 0 1 1.06 0l8.69 8.69a.75.75 0 1 0 1.06-1.06l-8.689-8.69a2.25 2.25 0 0 0-3.182 0l-8.69 8.69a.75.75 0 1 0 1.061 1.06l8.69-8.69Z" /><path d="m12 5.432 8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 0 1-.75-.75v-4.5a.75.75 0 0 0-.75-.75h-3a.75.75 0 0 0-.75.75V21a.75.75 0 0 1-.75.75H5.625a1.875 1.875 0 0 1-1.875-1.875v-6.198a2.29 2.29 0 0 0 .091-.086L12 5.432Z" /></svg>;
 const ChartBarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.035-.84-1.875-1.875-1.875h-.75Z" /><path d="M9.75 8.625c-1.035 0-1.875.84-1.875 1.875v11.25c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V10.5c0-1.035-.84-1.875-1.875-1.875h-.75Z" /><path d="M3 13.125c-1.035 0-1.875.84-1.875 1.875v6.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875v-6.75c0-1.035-.84-1.875-1.875-1.875H3Z" /></svg>;
-const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Zm13.5 9a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5Z" clipRule="evenodd" /></svg>;
+const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3-3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Zm13.5 9a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5Z" clipRule="evenodd" /></svg>;
 const ClockIcon: React.FC<{small?: boolean}> = ({ small }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={small ? "w-5 h-5" : "w-6 h-6"}><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 0 0 0-1.5h-3.75V6Z" clipRule="evenodd" /></svg>;
 const UserCircleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M18.685 19.097A9.723 9.723 0 0 0 21.75 12c0-5.385-4.365-9.75-9.75-9.75S2.25 6.615 2.25 12a9.723 9.723 0 0 0 3.065 7.097A9.716 9.716 0 0 0 12 21.75a9.716 9.716 0 0 0 6.685-2.653Zm-12.54-1.285A7.486 7.486 0 0 1 12 15a7.486 7.486 0 0 1 5.855 2.812A8.224 8.224 0 0 1 12 20.25a8.224 8.224 0 0 1-5.855-2.438ZM15.75 9a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" clipRule="evenodd" /></svg>;
 const LogoutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>;
