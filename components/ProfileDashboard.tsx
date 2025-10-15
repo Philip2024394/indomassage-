@@ -1,5 +1,6 @@
 
 
+
 import React, { useCallback, useState, useEffect } from 'react';
 import { SubType, Partner, Status, HomeServicePartner } from '../types';
 import ProfileForm from './ProfileForm';
@@ -54,7 +55,6 @@ const LocationManager: React.FC<{ lastLocation: string; onLocationSet: (location
 
 const UserStatusControl: React.FC<{ profile: Partner; onProfileUpdate: (updates: Partial<Partner>) => void; }> = ({ profile, onProfileUpdate }) => {
     const [location, setLocation] = useState(profile.location);
-    const isHomeService = profile.sub_type === SubType.HomeService;
     
     const statusIndicatorColor = () => {
         switch(profile.status) {
@@ -74,36 +74,22 @@ const UserStatusControl: React.FC<{ profile: Partner; onProfileUpdate: (updates:
     };
 
     if (profile.status === Status.Offline) {
-        if (isHomeService) {
-            return (
-                <div className="space-y-8">
-                    <LocationManager lastLocation={profile.location} onLocationSet={setLocation} />
-                    <div className="p-4">
-                        <Button onClick={handleGoOnline} fullWidth>
-                            Set Location & Go Online
-                        </Button>
-                    </div>
-                </div>
-            );
-        }
-        // For Place Partners
         return (
-            <DashboardSection title="Business Status">
-                <p className="text-sm text-slate-400 -mt-2 mb-6">Your business is currently offline. Go online to appear in search results for customers.</p>
-                <p className="text-sm text-slate-400">Fixed Location: <span className="font-semibold text-slate-300">{profile.location || 'Not set in profile'}</span></p>
-                <div className="mt-6">
-                   <Button onClick={() => onProfileUpdate({ status: Status.Online })} fullWidth>
-                       Go Online (Open for Business)
-                   </Button>
+            <div className="space-y-8">
+                <LocationManager lastLocation={profile.location} onLocationSet={setLocation} />
+                <div className="p-4">
+                    <Button onClick={handleGoOnline} fullWidth>
+                        Set Location & Go Online
+                    </Button>
                 </div>
-            </DashboardSection>
+            </div>
         );
     }
 
     return (
         <DashboardSection title="Your Status">
             <p className="text-sm text-slate-400 -mt-2 mb-6">
-                {isHomeService ? "Your location is currently set to:" : "Your business location is:"} <span className="font-semibold text-slate-300">{profile.location}</span>
+                Your location is currently set to: <span className="font-semibold text-slate-300">{profile.location}</span>
             </p>
             <div className="flex justify-center items-center gap-2 text-center bg-gray-800/80 p-4 rounded-lg">
                 <span className={`w-3 h-3 rounded-full ${statusIndicatorColor()} ${profile.status === Status.Online ? 'animate-pulse' : ''}`}></span>
@@ -235,7 +221,7 @@ const Earnings: React.FC = () => {
 
 // --- Main Dashboard Component ---
 
-type ActiveView = 'home' | 'earnings' | 'history' | 'profile';
+type ActiveView = 'home' | 'earnings' | 'schedule' | 'profile';
 
 const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile, supabase, headerImages, onProfileUpdate }) => {
   const [activeView, setActiveView] = useState<ActiveView>('home');
@@ -269,7 +255,7 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile, 
         return <ProfileForm profile={profile} onSave={onProfileUpdate} onBack={handleBackToHome} supabase={supabase} headerImages={headerImages} />;
       case 'earnings':
         return <Earnings />;
-      case 'history':
+      case 'schedule':
         return <AvailabilityManager bookedDates={bookedDates} onDatesChange={handleBookedDatesChange} />;
       default:
         return <p>Not found</p>;
@@ -367,7 +353,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ onLogout, activeView, setActiveVi
         <div className="flex justify-around items-center h-20 max-w-3xl mx-auto">
             <NavItem icon={<HomeIcon />} label="Home" view="home" activeView={activeView} onClick={setActiveView} />
             <NavItem icon={<ChartBarIcon />} label="Earnings" view="earnings" activeView={activeView} onClick={setActiveView} />
-            <NavItem icon={<CalendarIcon />} label="Schedule" view="history" activeView={activeView} onClick={setActiveView} />
+            <NavItem icon={<CalendarIcon />} label="Schedule" view="schedule" activeView={activeView} onClick={setActiveView} />
             <NavItem icon={<UserCircleIcon />} label="Profile" view="profile" activeView={activeView} onClick={setActiveView} />
              <button onClick={onLogout} className="flex flex-col items-center text-slate-400 hover:text-orange-500 transition-colors">
                 <LogoutIcon />

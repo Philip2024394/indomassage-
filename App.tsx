@@ -1,11 +1,11 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import ProfileDashboard from './components/ProfileDashboard';
 import { SubType, Partner, HomeServicePartner } from './types';
 import { initialFormData } from './components/ProfileForm';
-import SelectionScreen from './components/SelectionScreen';
 import PublicProfileView from './components/PublicProfileView';
 import { supabase, GOOGLE_MAPS_API_KEY } from './components/ConfigurationSetup';
 
@@ -43,10 +43,10 @@ const LoadingScreen: React.FC = () => (
     </div>
 );
 
-const AuthScreen: React.FC<{ supabase: any, initialSubType: SubType | null, onBack: () => void }> = ({ supabase, initialSubType, onBack }) => (
+const AuthScreen: React.FC<{ supabase: any }> = ({ supabase }) => (
      <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
         <div className="w-full h-screen">
-            <Auth supabase={supabase} initialSubType={initialSubType} onBack={onBack} />
+            <Auth supabase={supabase} />
         </div>
     </div>
 );
@@ -74,7 +74,6 @@ const App: React.FC = () => {
   const [profile, setProfile] = useState<Partner | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [authFlow, setAuthFlow] = useState<{ mode: 'welcome' | 'auth', subType: SubType | null }>({ mode: 'welcome', subType: null });
   const [publicProfileId, setPublicProfileId] = useState<string | null>(null);
   
   const initializeApp = async () => {
@@ -129,38 +128,30 @@ const App: React.FC = () => {
     // Successful sign-in is handled by onAuthStateChange
   };
 
-  const handleCreateProfile = async (subType: SubType) => {
+  const handleCreateProfile = async () => {
     if (!session?.user) return;
     setLoading(true);
 
-    let headerImageUrl = '';
-    if (subType === SubType.HomeService) {
-        const { count, error: countError } = await supabase
-            .from('profiles')
-            .select('*', { count: 'exact', head: true })
-            .eq('sub_type', SubType.HomeService);
-        
-        let nextImageIndex = 0;
-        if (!countError && count) {
-            nextImageIndex = count % HOME_SERVICE_HEADER_IMAGES.length;
-        }
-        headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
-    } else {
-        headerImageUrl = 'https://ik.imagekit.io/7grri5v7d/massage%20image%201.png?updatedAt=1760186885261';
-    }
+    const { count, error: countError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('sub_type', SubType.HomeService);
     
-    const newProfileData = {
+    let nextImageIndex = 0;
+    if (!countError && count) {
+        nextImageIndex = count % HOME_SERVICE_HEADER_IMAGES.length;
+    }
+    const headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
+    
+    const newProfileData: Omit<HomeServicePartner, 'id'> = {
         ...initialFormData(),
         user_id: session.user.id,
-        name: subType === SubType.HomeService ? 'New Therapist' : 'New Massage Place',
-        sub_type: subType,
+        name: 'New Therapist',
+        sub_type: SubType.HomeService,
         header_image_url: headerImageUrl,
+        is_verified: false,
+        years_of_experience: 0,
     };
-
-    if (subType === SubType.HomeService) {
-        (newProfileData as HomeServicePartner).is_verified = false;
-        (newProfileData as HomeServicePartner).years_of_experience = 0;
-    }
 
     const { data: insertedProfile, error: profileError } = await supabase
         .from('profiles')
@@ -237,7 +228,7 @@ const App: React.FC = () => {
         
         setSession(session);
 
-        if (_event === 'SIGNED_IN' && authFlow.subType && session?.user) {
+        if (_event === 'SIGNED_IN' && session?.user) {
             const { data: existingProfile } = await supabase
                 .from('profiles')
                 .select('id')
@@ -245,18 +236,15 @@ const App: React.FC = () => {
                 .single();
             
             if (!existingProfile) {
-                await handleCreateProfile(authFlow.subType);
+                await handleCreateProfile();
             }
-            setAuthFlow({ mode: 'welcome', subType: null });
-        } else if (!session) {
-            setAuthFlow({ mode: 'welcome', subType: null });
         }
     });
 
     return () => {
         authListener?.subscription.unsubscribe();
     };
-  }, [authFlow.subType]);
+  }, []);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -362,23 +350,7 @@ const App: React.FC = () => {
   }
   
   if (!session) {
-    if (authFlow.mode === 'welcome') {
-        return (
-            <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
-                <div className="w-full h-screen">
-                    <SelectionScreen 
-                        onSelect={(subType) => setAuthFlow({ mode: 'auth', subType: subType })}
-                        onLoginClick={() => setAuthFlow({ mode: 'auth', subType: null })}
-                    />
-                </div>
-            </div>
-        );
-    }
-    return <AuthScreen 
-              supabase={supabase} 
-              initialSubType={authFlow.subType} 
-              onBack={() => setAuthFlow({ mode: 'welcome', subType: null })} 
-            />;
+    return <AuthScreen supabase={supabase} />;
   }
   
   if (profile) {

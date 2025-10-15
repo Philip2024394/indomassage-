@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { SubType, Status, Partner, Price, HomeServicePartner } from '../types';
 import Input from './Input';
@@ -247,26 +248,22 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
   const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
 
 
-  const isHomeService = formData.sub_type === SubType.HomeService;
-
   useEffect(() => {
     // This effect syncs the form's state with the profile prop from the parent.
     // This is crucial for ensuring the form displays the latest data after a save.
     const profileData = { ...profile };
-    if (profileData.sub_type === SubType.HomeService) {
-      const basePrices: Price[] = [
-        { duration: 60, price: 0 },
-        { duration: 90, price: 0 },
-        { duration: 120, price: 0 },
-      ];
+    const basePrices: Price[] = [
+      { duration: 60, price: 0 },
+      { duration: 90, price: 0 },
+      { duration: 120, price: 0 },
+    ];
 
-      const normalizedPrices = basePrices.map(basePrice => {
-        const existingPrice = profile.prices?.find(p => p.duration === basePrice.duration);
-        return existingPrice || basePrice;
-      });
+    const normalizedPrices = basePrices.map(basePrice => {
+      const existingPrice = profile.prices?.find(p => p.duration === basePrice.duration);
+      return existingPrice || basePrice;
+    });
 
-      profileData.prices = normalizedPrices;
-    }
+    profileData.prices = normalizedPrices;
     setFormData(profileData);
   }, [profile]);
 
@@ -291,20 +288,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
         setFormData(prev => ({ ...prev, prices: updatedPrices } as Partner));
     }
   };
-  
-  const handleAddPrice = () => {
-    setFormData(prev => ({
-        ...prev,
-        prices: [...(prev.prices || []), { duration: 0, price: 0 }]
-    } as Partner));
-  };
-
-  const handleRemovePrice = (index: number) => {
-    const updatedPrices = [...(formData.prices || [])];
-    updatedPrices.splice(index, 1);
-    setFormData(prev => ({ ...prev, prices: updatedPrices } as Partner));
-  };
-
 
   const handleLocationChange = useCallback((newLocation: string) => {
     setFormData(prev => ({ ...prev, location: newLocation } as Partner));
@@ -359,7 +342,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
         // Upload profile picture if a new one was selected
         if (profileImageFile) {
             const fileExt = profileImageFile.name.split('.').pop();
-            const filePath = `${userId}/avatar.${fileExt}`;
+            const filePath = `profiles/${userId}/avatar.${fileExt}`;
             const publicUrl = await uploadImage(profileImageFile, filePath);
             if (publicUrl) {
                 updatesToSave.image_url = publicUrl;
@@ -368,20 +351,9 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
             }
         }
         
-        if (headerImageFile && !isHomeService) {
-            const fileExt = headerImageFile.name.split('.').pop();
-            const filePath = `${userId}/header.${fileExt}`;
-            const publicUrl = await uploadImage(headerImageFile, filePath);
-            if (publicUrl) {
-                updatesToSave.header_image_url = publicUrl;
-            } else {
-                throw new Error("Header image upload failed.");
-            }
-        }
-
-        if (idCardImageFile && isHomeService) {
+        if (idCardImageFile) {
             const fileExt = idCardImageFile.name.split('.').pop();
-            const filePath = `${userId}/id_card.${fileExt}`;
+            const filePath = `profiles/${userId}/id_card.${fileExt}`;
             const publicUrl = await uploadImage(idCardImageFile, filePath);
             if (publicUrl) {
                 (updatesToSave as HomeServicePartner).id_card_image_url = publicUrl;
@@ -394,7 +366,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
             const newImageUrls: string[] = [];
             for (const file of galleryImageFiles) {
                 const fileName = `gallery_${Date.now()}_${Math.floor(Math.random() * 1000)}.${file.name.split('.').pop()}`;
-                const filePath = `${userId}/${fileName}`;
+                const filePath = `profiles/${userId}/${fileName}`;
                 const publicUrl = await uploadImage(file, filePath);
                 if (publicUrl) {
                     newImageUrls.push(publicUrl);
@@ -444,54 +416,39 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                 Back to Dashboard
             </button>
 
-            <FormSection title={isHomeService ? "Therapist Information" : "Business Information"}>
-                <Input name="name" label={isHomeService ? "Full Name" : "Business Name"} value={formData.name} onChange={handleChange} required/>
+            <FormSection title="Therapist Information">
+                <Input name="name" label="Full Name" value={formData.name} onChange={handleChange} required/>
                 <ImageUpload 
-                    label={isHomeService ? "Profile Picture" : "Logo / Main Picture"} 
+                    label="Profile Picture"
                     value={formData.image_url || ''} 
                     onImageChange={setProfileImageFile} 
-                    helpText={isHomeService ? "Upload a clear headshot." : "Upload your business logo or a high-quality photo of your establishment."}
+                    helpText="Upload a clear headshot."
                     aspectRatio="square"
                 />
-                 {!isHomeService && (
-                    <ImageUpload 
-                        label="Header Image" 
-                        value={formData.header_image_url || ''} 
-                        onImageChange={setHeaderImageFile} 
-                        helpText="This is the banner image on your profile (16:9 ratio recommended)."
-                        aspectRatio="wide"
-                    />
-                 )}
-                
-                {isHomeService && (
-                  <>
-                    {(formData as HomeServicePartner).id_card_image_url ? (
-                      <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Indonesian ID Card (KTP)</label>
-                        <div className="flex items-center gap-3 p-4 bg-gray-800/80 rounded-lg text-slate-300 text-sm">
-                          <CheckCircleIcon />
-                          <span>ID card has been submitted for verification.</span>
-                        </div>
+                 
+                {/* FIX: Conditionally render Home Service specific fields for type safety. */}
+                {formData.sub_type === SubType.HomeService && (
+                <>
+                  {formData.id_card_image_url ? (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">Indonesian ID Card (KTP)</label>
+                      <div className="flex items-center gap-3 p-4 bg-gray-800/80 rounded-lg text-slate-300 text-sm">
+                        <CheckCircleIcon />
+                        <span>ID card has been submitted for verification.</span>
                       </div>
-                    ) : (
-                      <ImageUpload 
-                        label="Indonesian ID Card (KTP)" 
-                        value=""
-                        onImageChange={setIdCardImageFile} 
-                        helpText="This is for verification and is not public."
-                      />
-                    )}
-                    <Input name="years_of_experience" label="Years of Experience" type="number" value={(formData as HomeServicePartner).years_of_experience || ''} onChange={handleChange} required/>
-                  </>
-                )}
-
-                {!isHomeService && (
-                    <LocationInput 
-                        label="Business Location"
-                        onLocationSelect={handleLocationChange}
-                        initialValue={formData.location}
+                    </div>
+                  ) : (
+                    <ImageUpload 
+                      label="Indonesian ID Card (KTP)" 
+                      value=""
+                      onImageChange={setIdCardImageFile} 
+                      helpText="This is for verification and is not public."
                     />
+                  )}
+                  <Input name="years_of_experience" label="Years of Experience" type="number" value={formData.years_of_experience || ''} onChange={handleChange} required/>
+                </>
                 )}
+                
                  <div className="relative">
                     <label htmlFor="whatsapp" className="block text-sm font-medium text-slate-300 mb-1">WhatsApp Number</label>
                     <div className="flex items-center">
@@ -507,15 +464,13 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                 </div>
             </FormSection>
             
-            {!isHomeService && (
-                <FormSection title="Gallery Manager">
-                    <GalleryManager 
-                        existingImageUrls={formData.gallery_image_urls || []}
-                        onNewFilesSelected={setGalleryImageFiles}
-                        onDeleteExistingImage={handleDeleteGalleryImage}
-                    />
-                </FormSection>
-            )}
+            <FormSection title="Gallery Manager">
+                <GalleryManager 
+                    existingImageUrls={formData.gallery_image_urls || []}
+                    onNewFilesSelected={setGalleryImageFiles}
+                    onDeleteExistingImage={handleDeleteGalleryImage}
+                />
+            </FormSection>
 
             <FormSection title="Services & Pricing">
                 <MultiSelectDropdown 
@@ -526,9 +481,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                 />
                  <div className="flex justify-between items-center pt-4">
                     <h3 className="text-md font-semibold text-slate-200">Prices</h3>
-                    {!isHomeService && (
-                        <Button type="button" onClick={handleAddPrice} variant="secondary">Add Price</Button>
-                    )}
                 </div>
                  <p className="text-xs text-slate-500 -mt-1 mb-3">Set your prices in thousands of Rupiah (e.g., enter 150 for Rp 150k).</p>
                  <div className="space-y-4">
@@ -541,7 +493,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                                     placeholder="e.g., 60"
                                     value={price.duration || ''}
                                     onChange={e => handlePriceChange(index, 'duration', e.target.value)}
-                                    disabled={isHomeService}
+                                    disabled={true}
                                 />
                             </div>
                             <div className="flex-1 relative">
@@ -554,11 +506,6 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
                                 />
                                  <span className="absolute right-3 bottom-2.5 text-slate-400">k</span>
                             </div>
-                            {!isHomeService && (
-                                <button type="button" onClick={() => handleRemovePrice(index)} className="p-3 bg-red-600/20 text-red-400 rounded-md hover:bg-red-600/40">
-                                    <TrashIcon />
-                                </button>
-                            )}
                         </div>
                     ))}
                  </div>

@@ -39,8 +39,10 @@ export interface HomeServicePartner extends BasePartner {
   is_verified?: boolean;
 }
 
+// FIX: Added PlacePartner interface for business/spa locations.
 export interface PlacePartner extends BasePartner {
-    sub_type: SubType.Place;
+  sub_type: SubType.Place;
 }
 
+// FIX: Updated Partner to be a union type to support both home service and place partners.
 export type Partner = HomeServicePartner | PlacePartner;

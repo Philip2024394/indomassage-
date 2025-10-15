@@ -126,7 +126,8 @@ const PublicProfileView: React.FC<PublicProfileViewProps> = ({ profile, onClose,
                     <img src={profile.image_url || `https://i.pravatar.cc/150?u=${profile.id}`} alt="Profile" className="w-28 h-28 rounded-full border-4 border-gray-900 ring-4 ring-orange-500 object-cover" />
                     <div className="flex items-center justify-center gap-3 mt-4">
                         <h1 className="text-3xl font-bold text-white">{profile.name}</h1>
-                        {isHomeService && (profile as HomeServicePartner).is_verified && <VerifiedBadge />}
+                        {/* FIX: Removed redundant cast. The 'isHomeService' check provides type narrowing. */}
+                        {isHomeService && profile.is_verified && <VerifiedBadge />}
                     </div>
                     <div className="mt-2 flex items-center gap-2 text-sm font-medium">
                         <span className={`w-2.5 h-2.5 rounded-full ${currentStatus.color}`}></span>
