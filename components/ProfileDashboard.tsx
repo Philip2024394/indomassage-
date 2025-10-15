@@ -1,10 +1,10 @@
-
 import React, { useCallback, useState } from 'react';
-import { SubType, Partner, Status } from '../types';
+import { SubType, Partner, Status, HomeServicePartner } from '../types';
 import ProfileForm from './ProfileForm';
 import Button from './Button';
 import Input from './Input';
 import LocationInput from './LocationInput';
+import PublicProfileView from './PublicProfileView'; // Import the new component
 
 interface ProfileDashboardProps {
   onLogout: () => void;
@@ -48,9 +48,9 @@ const LocationManager: React.FC<{ lastLocation: string; onLocationSet: (location
     );
 };
 
-const TherapistStatusControl: React.FC<{ profile: Partner; onProfileUpdate: (updates: Partial<Partner>) => void; }> = ({ profile, onProfileUpdate }) => {
-    const isOnline = profile.status === Status.Online;
+const UserStatusControl: React.FC<{ profile: Partner; onProfileUpdate: (updates: Partial<Partner>) => void; }> = ({ profile, onProfileUpdate }) => {
     const [location, setLocation] = useState(profile.location);
+    const isHomeService = profile.sub_type === SubType.HomeService;
     
     const statusIndicatorColor = () => {
         switch(profile.status) {
@@ -70,22 +70,36 @@ const TherapistStatusControl: React.FC<{ profile: Partner; onProfileUpdate: (upd
     };
 
     if (profile.status === Status.Offline) {
-        return (
-            <div className="space-y-8">
-                <LocationManager lastLocation={profile.location} onLocationSet={setLocation} />
-                <div className="p-4">
-                    <Button onClick={handleGoOnline} fullWidth>
-                        Set Location & Go Online
-                    </Button>
+        if (isHomeService) {
+            return (
+                <div className="space-y-8">
+                    <LocationManager lastLocation={profile.location} onLocationSet={setLocation} />
+                    <div className="p-4">
+                        <Button onClick={handleGoOnline} fullWidth>
+                            Set Location & Go Online
+                        </Button>
+                    </div>
                 </div>
-            </div>
-        )
+            );
+        }
+        // For Place Partners
+        return (
+            <DashboardSection title="Business Status">
+                <p className="text-sm text-slate-400 -mt-2 mb-6">Your business is currently offline. Go online to appear in search results for customers.</p>
+                <p className="text-sm text-slate-400">Fixed Location: <span className="font-semibold text-slate-300">{profile.location || 'Not set in profile'}</span></p>
+                <div className="mt-6">
+                   <Button onClick={() => onProfileUpdate({ status: Status.Online })} fullWidth>
+                       Go Online (Open for Business)
+                   </Button>
+                </div>
+            </DashboardSection>
+        );
     }
 
     return (
         <DashboardSection title="Your Status">
             <p className="text-sm text-slate-400 -mt-2 mb-6">
-                Your location is currently set to: <span className="font-semibold text-slate-300">{profile.location}</span>
+                {isHomeService ? "Your location is currently set to:" : "Your business location is:"} <span className="font-semibold text-slate-300">{profile.location}</span>
             </p>
             <div className="flex justify-center items-center gap-2 text-center bg-gray-800/80 p-4 rounded-lg">
                 <span className={`w-3 h-3 rounded-full ${statusIndicatorColor()} ${profile.status === Status.Online ? 'animate-pulse' : ''}`}></span>
@@ -104,44 +118,80 @@ const TherapistStatusControl: React.FC<{ profile: Partner; onProfileUpdate: (upd
 };
 
 
-const BookingHistory: React.FC<{ bookedDates: string[]; setBookedDates: (dates: string[]) => void; }> = ({ bookedDates, setBookedDates }) => {
-    const [newDate, setNewDate] = useState('');
+const AvailabilityManager: React.FC<{ bookedDates: string[]; onDatesChange: (dates: string[]) => void; }> = ({ bookedDates, onDatesChange }) => {
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    const addDate = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (newDate && !bookedDates.includes(newDate)) {
-            setBookedDates([...bookedDates, newDate].sort());
-            setNewDate('');
-        }
+    const changeMonth = (offset: number) => {
+        setCurrentDate(prev => {
+            const newDate = new Date(prev);
+            newDate.setMonth(newDate.getMonth() + offset);
+            return newDate;
+        });
     };
 
-    const removeDate = (dateToRemove: string) => {
-        setBookedDates(bookedDates.filter(date => date !== dateToRemove));
+    const handleDateClick = (date: Date) => {
+        const dateString = date.toISOString().split('T')[0];
+        const isBooked = bookedDates.includes(dateString);
+        let newBookedDates;
+        if (isBooked) {
+            newBookedDates = bookedDates.filter(d => d !== dateString);
+        } else {
+            newBookedDates = [...bookedDates, dateString];
+        }
+        onDatesChange(newBookedDates.sort());
+    };
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const monthName = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+    
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => new Date(year, month, i + 1));
+
+    const renderCalendar = () => {
+        const dayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+        const blanks = Array(firstDayOfMonth).fill(null);
+        return (
+            <div className="grid grid-cols-7 gap-2 text-center">
+                {dayHeaders.map(day => <div key={day} className="font-bold text-xs text-slate-500 uppercase">{day}</div>)}
+                {blanks.map((_, i) => <div key={`blank-${i}`} />)}
+                {days.map(day => {
+                    const dayString = day.toISOString().split('T')[0];
+                    const isToday = day.getTime() === today.getTime();
+                    const isBooked = bookedDates.includes(dayString);
+                    const isPast = day < today;
+                    
+                    let dayClasses = "w-10 h-10 flex items-center justify-center rounded-full transition-colors cursor-pointer";
+                    if (isToday) dayClasses += " ring-2 ring-orange-500 text-white";
+                    if (isBooked) dayClasses += " bg-red-500/80 text-white font-bold hover:bg-red-600";
+                    else if (isPast) dayClasses += " text-slate-600 cursor-not-allowed";
+                    else dayClasses += " text-slate-300 hover:bg-gray-700";
+
+                    return (
+                        <div key={dayString} onClick={() => !isPast && handleDateClick(day)} className={dayClasses}>
+                            {day.getDate()}
+                        </div>
+                    );
+                })}
+            </div>
+        );
     };
 
     return (
-        <DashboardSection title="Booking History & Availability">
+        <DashboardSection title="Availability Manager">
             <p className="text-sm text-slate-400 -mt-2 mb-6">
-                Add dates you are fully booked. This will set your status to 'Busy' for those days on your public profile, preventing overbooking.
+                Click on a date to mark it as fully booked. Click again to make it available. Customers will see this on your public profile.
             </p>
-            <form onSubmit={addDate} className="flex flex-col sm:flex-row gap-2">
-                <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required noLabel className="flex-grow"/>
-                <Button type="submit" className="w-full sm:w-auto">Add Booked Date</Button>
-            </form>
-            <div className="mt-6 space-y-3">
-                <h3 className="text-md font-semibold text-slate-200">Your Booked Dates</h3>
-                {bookedDates.length > 0 ? (
-                    bookedDates.map(date => (
-                        <div key={date} className="flex justify-between items-center p-3 bg-gray-800/80 rounded-lg animate-fade-in">
-                            <span className="font-mono text-slate-300">{date}</span>
-                            <button type="button" onClick={() => removeDate(date)} className="p-2 text-slate-400 hover:text-red-500 rounded-full hover:bg-red-500/10 transition-colors">
-                                <TrashIcon/>
-                            </button>
-                        </div>
-                    ))
-                ) : (
-                    <p className="text-slate-500 text-center py-4">No booked dates added yet.</p>
-                )}
+            <div className="bg-gray-800/50 p-4 rounded-xl">
+                <div className="flex justify-between items-center mb-4">
+                    <button onClick={() => changeMonth(-1)} className="p-2 rounded-full hover:bg-gray-700"><ChevronLeftIcon /></button>
+                    <h3 className="text-md font-semibold text-white">{monthName}</h3>
+                    <button onClick={() => changeMonth(1)} className="p-2 rounded-full hover:bg-gray-700"><ChevronRightIcon /></button>
+                </div>
+                {renderCalendar()}
             </div>
         </DashboardSection>
     );
@@ -186,7 +236,8 @@ type ActiveView = 'home' | 'earnings' | 'history' | 'profile';
 const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: initialProfile, supabase }) => {
   const [activeView, setActiveView] = useState<ActiveView>('home');
   const [profile, setProfile] = useState<Partner>(initialProfile);
-  const [bookedDates, setBookedDates] = useState<string[]>(['2024-12-24', '2024-12-25', '2024-12-31']);
+  const [bookedDates, setBookedDates] = useState<string[]>(initialProfile.booked_dates || []);
+  const [isPreviewing, setIsPreviewing] = useState(false);
 
   const handleProfileUpdate = async (updates: Partial<Partner>) => {
     const newProfile = { ...profile, ...updates };
@@ -204,6 +255,11 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: 
     }
   };
 
+  const handleBookedDatesChange = (newDates: string[]) => {
+    setBookedDates(newDates);
+    handleProfileUpdate({ booked_dates: newDates });
+  };
+
   const handleBackToHome = () => {
     setActiveView('home');
   }
@@ -211,21 +267,25 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: 
   const renderContent = () => {
     switch(activeView) {
       case 'home':
-        return <TherapistStatusControl profile={profile} onProfileUpdate={handleProfileUpdate} />
+        return <UserStatusControl profile={profile} onProfileUpdate={handleProfileUpdate} />
       case 'profile':
-        return <ProfileForm profile={profile} onSave={handleProfileUpdate} onBack={handleBackToHome} />;
+        return <ProfileForm profile={profile} onSave={handleProfileUpdate} onBack={handleBackToHome} supabase={supabase} />;
       case 'earnings':
         return <Earnings />;
       case 'history':
-        return <BookingHistory bookedDates={bookedDates} setBookedDates={setBookedDates} />;
+        return <AvailabilityManager bookedDates={bookedDates} onDatesChange={handleBookedDatesChange} />;
       default:
         return <p>Not found</p>;
     }
   };
+  
+  if (isPreviewing) {
+    return <PublicProfileView profile={profile} onClose={() => setIsPreviewing(false)} />;
+  }
 
   return (
     <div className="flex flex-col h-screen bg-black overflow-hidden">
-      <ProfileHeader profile={profile} />
+      <ProfileHeader profile={profile} onPreview={() => setIsPreviewing(true)} />
       <main id="main-content" className="flex-grow overflow-y-auto p-4 pb-28">
           {renderContent()}
       </main>
@@ -234,17 +294,75 @@ const ProfileDashboard: React.FC<ProfileDashboardProps> = ({ onLogout, profile: 
   );
 };
 
-const ProfileHeader: React.FC<{ profile: Partner }> = ({ profile }) => (
-    <header className="flex flex-col items-center p-6 text-center">
-        <img src={profile.image_url || `https://i.pravatar.cc/150?u=${profile.id}`} alt="Profile" className="w-24 h-24 rounded-full border-4 border-gray-800 ring-2 ring-orange-500 object-cover" />
-        <h1 className="text-2xl font-bold text-white mt-4">{profile.name}</h1>
-        <div className="mt-6 w-full max-w-md mx-auto bg-gray-900/50 backdrop-blur-xl border border-gray-700/80 rounded-2xl p-4 flex justify-around">
-            <StatItem value={profile.status} label="Status" />
-            <StatItem value={'N/A'} label="Acceptance" />
-            <StatItem value={'N/A'} label="Completion" />
-        </div>
-    </header>
-);
+const VerificationStatus: React.FC<{ profile: Partner }> = ({ profile }) => {
+  if (profile.sub_type !== SubType.HomeService) return null;
+
+  const homeServiceProfile = profile as HomeServicePartner;
+  
+  if (homeServiceProfile.is_verified) {
+    return (
+      <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-green-500/10 text-green-400 text-sm font-semibold rounded-full">
+        <CheckCircleIcon />
+        <span>Verified</span>
+      </div>
+    );
+  }
+  
+  if (homeServiceProfile.id_card_image_url) {
+    return (
+      <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-yellow-500/10 text-yellow-400 text-sm font-semibold rounded-full">
+        <ClockIcon small />
+        <span>Pending Verification</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-red-500/10 text-red-400 text-sm font-semibold rounded-full">
+      <XCircleIcon />
+      <span>Not Verified</span>
+    </div>
+  );
+};
+
+
+const ProfileHeader: React.FC<{ profile: Partner, onPreview: () => void }> = ({ profile, onPreview }) => {
+    const handleShare = () => {
+        const url = `${window.location.origin}${window.location.pathname}?profile=${profile.user_id}`;
+        navigator.clipboard.writeText(url)
+            .then(() => alert('Your public profile link has been copied to the clipboard!'))
+            .catch(err => console.error('Failed to copy link: ', err));
+    };
+
+    return (
+        <header className="relative flex flex-col items-center p-6 text-center">
+            <img src={profile.image_url || `https://i.pravatar.cc/150?u=${profile.id}`} alt="Profile" className="w-24 h-24 rounded-full border-4 border-gray-800 ring-2 ring-orange-500 object-cover" />
+            <h1 className="text-2xl font-bold text-white mt-4">{profile.name}</h1>
+            <VerificationStatus profile={profile} />
+            <div className="mt-6 w-full max-w-md mx-auto bg-gray-900/50 backdrop-blur-xl border border-gray-700/80 rounded-2xl p-4 flex justify-around">
+                <StatItem value={profile.status} label="Status" />
+                <StatItem value={'N/A'} label="Acceptance" />
+                <StatItem value={'N/A'} label="Completion" />
+            </div>
+             <div className="absolute top-4 right-4 flex gap-2">
+                <button 
+                  onClick={handleShare} 
+                  className="p-2 text-slate-400 hover:text-orange-500 rounded-full hover:bg-orange-500/10 transition-colors"
+                  aria-label="Share Profile"
+                >
+                  <ShareIcon />
+                </button>
+                <button 
+                  onClick={onPreview} 
+                  className="p-2 text-slate-400 hover:text-orange-500 rounded-full hover:bg-orange-500/10 transition-colors"
+                  aria-label="Preview Profile"
+                >
+                  <EyeIcon />
+                </button>
+            </div>
+        </header>
+    );
+};
 
 const StatItem: React.FC<{ value: string; label: string }> = ({ value, label }) => (
     <div className="text-center">
@@ -267,7 +385,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ onLogout, activeView, setActiveVi
         <div className="flex justify-around items-center h-20 max-w-3xl mx-auto">
             <NavItem icon={<HomeIcon />} label="Home" view="home" activeView={activeView} onClick={setActiveView} />
             <NavItem icon={<ChartBarIcon />} label="Earnings" view="earnings" activeView={activeView} onClick={setActiveView} />
-            <NavItem icon={<ClockIcon />} label="History" view="history" activeView={activeView} onClick={setActiveView} />
+            <NavItem icon={<CalendarIcon />} label="Schedule" view="history" activeView={activeView} onClick={setActiveView} />
             <NavItem icon={<UserCircleIcon />} label="Profile" view="profile" activeView={activeView} onClick={setActiveView} />
              <button onClick={onLogout} className="flex flex-col items-center text-slate-400 hover:text-orange-500 transition-colors">
                 <LogoutIcon />
@@ -296,9 +414,15 @@ const NavItem: React.FC<NavItemProps> = ({ icon, label, view, activeView, onClic
 // --- ICONS ---
 const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M11.47 3.841a.75.75 0 0 1 1.06 0l8.69 8.69a.75.75 0 1 0 1.06-1.06l-8.689-8.69a2.25 2.25 0 0 0-3.182 0l-8.69 8.69a.75.75 0 1 0 1.061 1.06l8.69-8.69Z" /><path d="m12 5.432 8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 0 1-.75-.75v-4.5a.75.75 0 0 0-.75-.75h-3a.75.75 0 0 0-.75.75V21a.75.75 0 0 1-.75.75H5.625a1.875 1.875 0 0 1-1.875-1.875v-6.198a2.29 2.29 0 0 0 .091-.086L12 5.432Z" /></svg>;
 const ChartBarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M18.375 2.25c-1.035 0-1.875.84-1.875 1.875v15.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V4.125c0-1.035-.84-1.875-1.875-1.875h-.75Z" /><path d="M9.75 8.625c-1.035 0-1.875.84-1.875 1.875v11.25c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875V10.5c0-1.035-.84-1.875-1.875-1.875h-.75Z" /><path d="M3 13.125c-1.035 0-1.875.84-1.875 1.875v6.75c0 1.035.84 1.875 1.875 1.875h.75c1.035 0 1.875-.84 1.875-1.875v-6.75c0-1.035-.84-1.875-1.875-1.875H3Z" /></svg>;
-const ClockIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 0 0 0-1.5h-3.75V6Z" clipRule="evenodd" /></svg>;
+const CalendarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3A.75.75 0 0 1 18 3v1.5h.75a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6V3a.75.75 0 0 1 .75-.75Zm13.5 9a1.5 1.5 0 0 0-1.5-1.5H5.25a1.5 1.5 0 0 0-1.5 1.5v7.5a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5v-7.5Z" clipRule="evenodd" /></svg>;
+const ClockIcon: React.FC<{small?: boolean}> = ({ small }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={small ? "w-5 h-5" : "w-6 h-6"}><path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 0 0 0-1.5h-3.75V6Z" clipRule="evenodd" /></svg>;
 const UserCircleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path fillRule="evenodd" d="M18.685 19.097A9.723 9.723 0 0 0 21.75 12c0-5.385-4.365-9.75-9.75-9.75S2.25 6.615 2.25 12a9.723 9.723 0 0 0 3.065 7.097A9.716 9.716 0 0 0 12 21.75a9.716 9.716 0 0 0 6.685-2.653Zm-12.54-1.285A7.486 7.486 0 0 1 12 15a7.486 7.486 0 0 1 5.855 2.812A8.224 8.224 0 0 1 12 20.25a8.224 8.224 0 0 1-5.855-2.438ZM15.75 9a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" clipRule="evenodd" /></svg>;
 const LogoutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" /></svg>;
-const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.134-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.067-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>;
+const ChevronLeftIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M12.79 5.23a.75.75 0 0 1 0 1.06L9.06 10l3.73 3.71a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clipRule="evenodd" /></svg>;
+const ChevronRightIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M7.21 14.77a.75.75 0 0 1 0-1.06L10.94 10 7.21 6.29a.75.75 0 1 1 1.06-1.06l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0Z" clipRule="evenodd" /></svg>;
+const EyeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>;
+const ShareIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.186 2.25 2.25 0 0 0-3.933 2.186Z" /></svg>;
+const CheckCircleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" /></svg>;
+const XCircleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z" clipRule="evenodd" /></svg>;
 
 export default ProfileDashboard;

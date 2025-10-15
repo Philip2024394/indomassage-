@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { SubType, Status, Partner, Price, HomeServicePartner } from '../types';
 import Input from './Input';
@@ -10,6 +9,7 @@ interface ProfileFormProps {
   profile: Partner;
   onSave: (data: Partial<Partner>) => void;
   onBack: () => void;
+  supabase: any; // Add supabase client prop
 }
 
 // Checkbox Component
@@ -120,16 +120,84 @@ const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ label, option
   );
 };
 
+const GalleryManager: React.FC<{
+    existingImageUrls: string[];
+    onNewFilesSelected: (files: File[]) => void;
+    onDeleteExistingImage: (url: string) => void;
+}> = ({ existingImageUrls, onNewFilesSelected, onDeleteExistingImage }) => {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [previews, setPreviews] = useState<string[]>([]);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length > 0) {
+            onNewFilesSelected(files);
+            // FIX: Explicitly cast 'file' to Blob to resolve TypeScript error where 'file'
+            // is inferred as 'unknown', which is not assignable to createObjectURL's parameter.
+            const newPreviews = files.map(file => URL.createObjectURL(file as Blob));
+            setPreviews(prev => [...prev, ...newPreviews]);
+        }
+    };
+
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-md font-semibold text-slate-200">Profile Gallery</h3>
+                <Button type="button" onClick={() => fileInputRef.current?.click()}>
+                    Add Images
+                </Button>
+                <input
+                    type="file"
+                    multiple
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept="image/png, image/jpeg, image/jpg"
+                />
+            </div>
+            <p className="text-xs text-slate-500 -mt-2 mb-4">
+                Showcase your space, services, or past work.
+            </p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-4">
+                {existingImageUrls.map(url => (
+                    <div key={url} className="relative group aspect-square">
+                        <img src={url} alt="Gallery item" className="w-full h-full object-cover rounded-lg" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <button
+                                type="button"
+                                onClick={() => onDeleteExistingImage(url)}
+                                className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700"
+                                aria-label="Delete image"
+                            >
+                                <TrashIcon />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+                {previews.map((previewUrl, index) => (
+                     <div key={index} className="relative aspect-square">
+                        <img src={previewUrl} alt="New preview" className="w-full h-full object-cover rounded-lg" />
+                         <div className="absolute top-1 right-1 px-2 py-0.5 bg-blue-500/80 text-white text-xs font-bold rounded-full">NEW</div>
+                    </div>
+                ))}
+            </div>
+             {existingImageUrls.length === 0 && previews.length === 0 && (
+                <div className="text-center py-8 border-2 border-dashed border-gray-700 rounded-lg">
+                    <p className="text-slate-500">No gallery images uploaded yet.</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 // --- Main Profile Form Component ---
 
 const MASSAGE_TYPES_OPTIONS = ["Balinese Massage", "Deep Tissue", "Reflexology", "Aromatherapy", "Hot Stone", "Shiatsu", "Thai Massage", "Swedish Massage"];
 
-export const initialFormData = (): Partial<Partner> => {
+export const initialFormData = (): Omit<Partner, 'sub_type' | 'user_id' | 'id' | 'name' | 'header_image_url'> => {
     return {
-        name: '',
         type: 'massage' as const,
-        sub_type: SubType.HomeService,
         location: '',
         status: Status.Offline,
         image_url: '',
@@ -141,16 +209,24 @@ export const initialFormData = (): Partial<Partner> => {
             { duration: 90, price: 0 },
             { duration: 120, price: 0 },
         ],
-        years_of_experience: 0,
-        id_card_image_url: '',
+        booked_dates: [],
+        gallery_image_urls: [],
+        // FIX: Removed properties specific to HomeServicePartner to make this function generic for all partner types.
+        // The optional properties will be initialized as undefined, which is handled in the form.
     };
 };
 
 
-const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) => {
-  const [formData, setFormData] = useState<Partial<Partner>>(profile);
+const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supabase }) => {
+  const [formData, setFormData] = useState<Partner>(profile);
   const [termsAccepted, setTermsAccepted] = useState(true); // Default to true for existing users
   const [isSaving, setIsSaving] = useState(false);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
+  const [idCardImageFile, setIdCardImageFile] = useState<File | null>(null);
+  const [galleryImageFiles, setGalleryImageFiles] = useState<File[]>([]);
+
+
+  const isHomeService = formData.sub_type === SubType.HomeService;
 
   useEffect(() => {
     setFormData(profile);
@@ -160,7 +236,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.currentTarget;
     const isNumber = e.currentTarget instanceof HTMLInputElement && e.currentTarget.type === 'number';
-    setFormData(prev => ({ ...prev, [name]: isNumber ? parseFloat(value) || 0 : value }));
+    setFormData(prev => ({ ...prev, [name]: isNumber ? parseFloat(value) || 0 : value } as Partner));
   };
   
   const handlePriceChange = (index: number, value: string) => {
@@ -169,36 +245,112 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
     const updatedPrices = [...(formData.prices || [])];
     if (updatedPrices[index]) {
         updatedPrices[index] = { ...updatedPrices[index], price: newPrice };
-        setFormData(prev => ({ ...prev, prices: updatedPrices }));
+        setFormData(prev => ({ ...prev, prices: updatedPrices } as Partner));
     }
   };
-  
-  const handleImageChange = useCallback((field: 'image_url' | 'id_card_image_url', file: File) => {
-    // In a real app, you'd upload this to Supabase Storage and get a URL.
-    // For now, we'll use a data URL as a placeholder.
-    const reader = new FileReader();
-    reader.onloadend = () => {
-        setFormData(prev => ({...prev, [field]: reader.result as string}))
-    };
-    reader.readAsDataURL(file);
-  }, []);
 
   const handleLocationChange = useCallback((newLocation: string) => {
-    setFormData(prev => ({ ...prev, location: newLocation }));
+    setFormData(prev => ({ ...prev, location: newLocation } as Partner));
   }, []);
 
+  const handleDeleteGalleryImage = (urlToDelete: string) => {
+    setFormData(prev => ({
+        ...prev,
+        gallery_image_urls: (prev.gallery_image_urls || []).filter(url => url !== urlToDelete)
+    } as Partner));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!termsAccepted) {
-          alert("Please accept the terms and conditions to continue.");
-          return;
-      }
-      setIsSaving(true);
-      await onSave(formData);
-      setIsSaving(false);
-      alert('Profile saved!');
-      onBack(); // Go back to home after saving
+    e.preventDefault();
+    if (!termsAccepted) {
+      alert("Please accept the terms and conditions to continue.");
+      return;
+    }
+    setIsSaving(true);
+
+    const updatesToSave: Partial<Partner> = { ...formData };
+    
+    // Helper to upload an image to Supabase Storage
+    const uploadImage = async (file: File, path: string): Promise<string | null> => {
+        const { data, error } = await supabase.storage
+            .from('profile-assets') // NOTE: Make sure you have a bucket named 'profile-assets'
+            .upload(path, file, {
+                cacheControl: '3600',
+                upsert: true, // Overwrite file if it exists
+            });
+
+        if (error) {
+            console.error('Error uploading image:', error.message);
+            alert(`Failed to upload image: ${error.message}`);
+            return null;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+            .from('profile-assets')
+            .getPublicUrl(data.path);
+            
+        return publicUrl;
+    };
+
+    try {
+        // Upload profile picture if a new one was selected
+        if (profileImageFile) {
+            const fileExt = profileImageFile.name.split('.').pop();
+            const filePath = `${profile.user_id}/avatar.${fileExt}`;
+            const publicUrl = await uploadImage(profileImageFile, filePath);
+            if (publicUrl) {
+                updatesToSave.image_url = publicUrl;
+            } else {
+                throw new Error("Profile picture upload failed.");
+            }
+        }
+
+        // Upload ID card if a new one was selected
+        if (idCardImageFile && isHomeService) {
+            const fileExt = idCardImageFile.name.split('.').pop();
+            const filePath = `${profile.user_id}/id_card.${fileExt}`;
+            const publicUrl = await uploadImage(idCardImageFile, filePath);
+            if (publicUrl) {
+                (updatesToSave as HomeServicePartner).id_card_image_url = publicUrl;
+            } else {
+                throw new Error("ID card upload failed.");
+            }
+        }
+        
+        // Upload new gallery images
+        if (galleryImageFiles.length > 0) {
+            const newImageUrls: string[] = [];
+            for (const file of galleryImageFiles) {
+                // Create a unique filename for each gallery image
+                const fileName = `gallery_${Date.now()}_${Math.floor(Math.random() * 1000)}.${file.name.split('.').pop()}`;
+                const filePath = `${profile.user_id}/${fileName}`;
+                const publicUrl = await uploadImage(file, filePath);
+                if (publicUrl) {
+                    newImageUrls.push(publicUrl);
+                }
+            }
+            // Combine existing URLs (after potential deletions) with new ones
+            updatesToSave.gallery_image_urls = [...(formData.gallery_image_urls || []), ...newImageUrls];
+        }
+
+
+        // Call the parent onSave function with the final data (including new image URLs)
+        await onSave(updatesToSave);
+
+        // Reset file state after successful save
+        setProfileImageFile(null);
+        setIdCardImageFile(null);
+        setGalleryImageFiles([]);
+
+        alert('Profile saved successfully!');
+        onBack(); // Go back to the dashboard
+
+    } catch (error: any) {
+        console.error('Save process failed:', error);
+        alert(`An error occurred while saving: ${error.message}`);
+    } finally {
+        setIsSaving(false);
+    }
   };
   
   return (
@@ -208,22 +360,39 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
             Back to Dashboard
         </button>
 
-        <FormSection title="Therapist Information">
-            <Input name="name" label="Full Name" value={formData.name} onChange={handleChange} required/>
+        <FormSection title={isHomeService ? "Therapist Information" : "Business Information"}>
+            <Input name="name" label={isHomeService ? "Full Name" : "Business Name"} value={formData.name} onChange={handleChange} required/>
             <ImageUpload 
-                label="Profile Picture" 
-                value={(formData as HomeServicePartner).image_url || ''} 
-                onImageChange={(file) => handleImageChange('image_url', file)} 
-                helpText="Upload a clear headshot."
+                label={isHomeService ? "Profile Picture" : "Logo / Main Picture"} 
+                value={formData.image_url || ''} 
+                onImageChange={setProfileImageFile} 
+                helpText={isHomeService ? "Upload a clear headshot." : "Upload your business logo or a high-quality photo of your establishment."}
             />
-            <ImageUpload 
-                label="Indonesian ID Card (KTP)" 
-                value={(formData as HomeServicePartner).id_card_image_url || ''}
-                onImageChange={(file) => handleImageChange('id_card_image_url', file)} 
-                helpText="This is for verification and is not public."
-            />
+            
+            {isHomeService && (
+              <>
+                {(formData as HomeServicePartner).id_card_image_url ? (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Indonesian ID Card (KTP)</label>
+                    <div className="flex items-center gap-3 p-4 bg-gray-800/80 rounded-lg text-slate-300 text-sm">
+                      <CheckCircleIcon />
+                      <span>ID card has been submitted for verification.</span>
+                    </div>
+                  </div>
+                ) : (
+                  <ImageUpload 
+                    label="Indonesian ID Card (KTP)" 
+                    value=""
+                    onImageChange={setIdCardImageFile} 
+                    helpText="This is for verification and is not public."
+                  />
+                )}
+                <Input name="years_of_experience" label="Years of Experience" type="number" value={(formData as HomeServicePartner).years_of_experience || ''} onChange={handleChange} required/>
+              </>
+            )}
+
             <LocationInput 
-                label="Primary Operating Area"
+                label={isHomeService ? "Primary Operating Area" : "Business Location"}
                 onLocationSelect={handleLocationChange}
                 initialValue={formData.location}
             />
@@ -234,12 +403,20 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
                     <Input id="whatsapp" name="whatsapp" type="tel" value={formData.whatsapp} onChange={handleChange} required noLabel className="rounded-l-none"/>
                 </div>
             </div>
-            <Input name="years_of_experience" label="Years of Experience" type="number" value={(formData as HomeServicePartner).years_of_experience || ''} onChange={handleChange} required/>
+            
             <div>
               <label htmlFor="bio" className="block text-sm font-medium text-slate-300 mb-1">Bio / Description</label>
               <textarea name="bio" id="bio" rows={4} value={formData.bio} onChange={handleChange} maxLength={250} className="w-full px-3 py-2 bg-black/30 backdrop-blur-sm border border-white/20 text-slate-100 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-500 focus:border-orange-500 transition-all placeholder:text-slate-400" required></textarea>
               <p className="text-right text-xs text-slate-500 mt-1">{(formData.bio || '').length} / 250</p>
             </div>
+        </FormSection>
+        
+        <FormSection title="Gallery Manager">
+            <GalleryManager 
+                existingImageUrls={formData.gallery_image_urls || []}
+                onNewFilesSelected={setGalleryImageFiles}
+                onDeleteExistingImage={handleDeleteGalleryImage}
+            />
         </FormSection>
 
         <FormSection title="Services & Pricing">
@@ -247,7 +424,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack }) =>
                 label="Massage Types Offered"
                 options={MASSAGE_TYPES_OPTIONS}
                 selectedOptions={formData.massage_types || []}
-                onSelectionChange={(selection) => setFormData(p => ({...p, massage_types: selection}))}
+                onSelectionChange={(selection) => setFormData(p => ({...p, massage_types: selection} as Partner))}
             />
              <h3 className="text-md font-semibold text-slate-200 pt-4">Prices</h3>
              <p className="text-xs text-slate-500 -mt-1 mb-3">Set your prices in thousands of Rupiah (e.g., enter 150 for Rp 150k).</p>
@@ -293,6 +470,7 @@ const FormSection: React.FC<{ title: string, children: React.ReactNode }> = ({ t
 // --- ICONS ---
 const CameraIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-gray-500"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.776 48.776 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM18.75 10.5h.008v.008h-.008V10.5Z" /></svg>;
 const ChevronDownIcon: React.FC<{isOpen: boolean}> = ({ isOpen }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}><path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" /></svg>;
-
+const CheckCircleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-green-400"><path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" /></svg>;
+const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.134-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.067-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>;
 
 export default ProfileForm;

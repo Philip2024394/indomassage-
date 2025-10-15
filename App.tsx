@@ -4,6 +4,8 @@ import Auth from './components/Auth';
 import ProfileDashboard from './components/ProfileDashboard';
 import { SubType, Partner } from './types';
 import { initialFormData } from './components/ProfileForm';
+import SelectionScreen from './components/SelectionScreen';
+import PublicProfileView from './components/PublicProfileView';
 
 // Extend the Window interface to include our global API key for TypeScript
 declare global {
@@ -50,6 +52,21 @@ const HOME_SERVICE_HEADER_IMAGES = [
 
 // Initialize Supabase client ONLY if configured
 const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+// --- Helper Components ---
+const LoadingScreen: React.FC = () => (
+    <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center text-white">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-orange-500"></div>
+    </div>
+);
+
+const AuthScreen: React.FC<{ supabase: any }> = ({ supabase }) => (
+     <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
+        <div className="w-full h-screen">
+            <Auth supabase={supabase} />
+        </div>
+    </div>
+);
 
 // --- Configuration Error Component ---
 const ConfigurationError: React.FC = () => (
@@ -104,40 +121,47 @@ const App: React.FC = () => {
   const [profile, setProfile] = useState<Partner | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
+  const [publicProfileId, setPublicProfileId] = useState<string | null>(null);
 
-  const checkSession = async () => {
+  const checkInitialState = async () => {
     if (!supabase) {
-        setLoading(false);
-        return;
+      setLoading(false);
+      return;
     }
-    setConnectionError(null);
-    setLoading(true);
-
-    const { data: { session }, error } = await supabase.auth.getSession();
     
-    if (error) {
-        console.error("Supabase connection error:", error);
-        setConnectionError("Failed to connect to the database. Please check your internet connection and try again.");
-        setLoading(false);
+    // Check for public profile URL first
+    const urlParams = new URLSearchParams(window.location.search);
+    const profileId = urlParams.get('profile');
+
+    if (profileId) {
+      setPublicProfileId(profileId);
     } else {
-        setSession(session);
-        // If there's no session, we're done loading. The user will see the auth screen.
-        if (!session) {
-            setLoading(false);
-        }
-        // If there is a session, the profile useEffect will trigger, which will handle the loading state.
+      // Proceed with normal session check
+      setConnectionError(null);
+      setLoading(true);
+
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+          console.error("Supabase connection error:", error);
+          setConnectionError("Failed to connect to the database. Please check your internet connection and try again.");
+      } else {
+          setSession(session);
+      }
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    checkSession(); // Initial check on mount
+    checkInitialState();
 
     if (supabase) {
         const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-            // When auth state changes, if a new session appears, reset profile to trigger fetch
-            if (session?.user?.id !== profile?.user_id) {
-                setProfile(null);
-            }
+            // Reset state only on auth change, not on initial load
+            setProfile(null);
+            setNeedsProfileSetup(false);
+            setPublicProfileId(null); // Clear public view on login/logout
             setSession(session);
         });
 
@@ -149,13 +173,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!supabase) return;
+    
     const fetchProfile = async () => {
-      if (session?.user) {
-        if (profile && profile.user_id === session.user.id) {
-            setLoading(false);
-            return; // Profile already loaded for this session
-        }
-          
+      // Fetch for logged-in user
+      if (session?.user && !publicProfileId) {
         setLoading(true);
         const { data, error } = await supabase
           .from('profiles')
@@ -163,44 +184,9 @@ const App: React.FC = () => {
           .eq('user_id', session.user.id)
           .single();
 
-        if (error && error.code === 'PGRST116') { // No rows found - this is a new user
-            console.log('No profile found for new user, creating one...');
-             // Assign a rotating header image for the new therapist
-            const { count, error: countError } = await supabase
-                .from('profiles')
-                .select('*', { count: 'exact', head: true })
-                .eq('sub_type', SubType.HomeService);
-
-            let headerImageUrl = '';
-            if (countError) {
-                console.error('Error counting profiles:', countError);
-                // Fallback to a random image from the list if count fails
-                headerImageUrl = HOME_SERVICE_HEADER_IMAGES[Math.floor(Math.random() * HOME_SERVICE_HEADER_IMAGES.length)];
-            } else {
-                const nextImageIndex = (count || 0) % HOME_SERVICE_HEADER_IMAGES.length;
-                headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
-            }
-            
-            const newProfileData = {
-                ...initialFormData(),
-                user_id: session.user.id,
-                name: 'New Member', // Default name
-                header_image_url: headerImageUrl,
-            };
-
-            const { data: insertedProfile, error: profileError } = await supabase
-                .from('profiles')
-                .insert(newProfileData)
-                .select()
-                .single();
-
-            if (profileError) {
-                 console.error('Error creating profile:', profileError);
-                 setConnectionError(`Account created, but failed to create a profile automatically. Please try again.`);
-            } else {
-                setProfile(insertedProfile as Partner);
-            }
-
+        if (error && error.code === 'PGRST116') {
+            console.log('No profile found, showing setup screen.');
+            setNeedsProfileSetup(true);
         } else if (error) { 
             console.error('Error fetching profile:', error);
             setConnectionError("Could not load your profile. Please check your internet connection.");
@@ -208,12 +194,80 @@ const App: React.FC = () => {
             setProfile(data as Partner);
         }
         setLoading(false);
-      } else {
-        setProfile(null);
       }
     };
-    fetchProfile();
-  }, [session]);
+    
+    const fetchPublicProfile = async () => {
+        // Fetch for public view
+        if (publicProfileId) {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('user_id', publicProfileId)
+                .single();
+
+            if (error) {
+                console.error('Error fetching public profile:', error);
+                setConnectionError(`Could not find the requested profile. It may no longer exist.`);
+            } else {
+                setProfile(data as Partner);
+            }
+            setLoading(false);
+        }
+    };
+
+    if (publicProfileId) {
+      fetchPublicProfile();
+    } else {
+      fetchProfile();
+    }
+  }, [session, publicProfileId]);
+  
+  const handleCreateProfile = async (subType: SubType) => {
+    if (!supabase || !session?.user) return;
+    setLoading(true);
+    setNeedsProfileSetup(false);
+
+    let headerImageUrl = '';
+    if (subType === SubType.HomeService) {
+        const { count, error: countError } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('sub_type', SubType.HomeService);
+        
+        let nextImageIndex = 0;
+        if (!countError && count) {
+            nextImageIndex = count % HOME_SERVICE_HEADER_IMAGES.length;
+        }
+        headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
+    } else {
+        // Use a generic image for Massage Places
+        headerImageUrl = 'https://ik.imagekit.io/7grri5v7d/massage%20image%201.png?updatedAt=1760186885261';
+    }
+    
+    const newProfileData = {
+        ...initialFormData(),
+        user_id: session.user.id,
+        name: subType === SubType.HomeService ? 'New Therapist' : 'New Massage Place',
+        sub_type: subType, // Set the selected sub_type
+        header_image_url: headerImageUrl,
+    };
+
+    const { data: insertedProfile, error: profileError } = await supabase
+        .from('profiles')
+        .insert(newProfileData)
+        .select()
+        .single();
+
+    if (profileError) {
+         console.error('Error creating profile:', profileError);
+         setConnectionError(`Failed to create your profile. Please log out and try again.`);
+    } else {
+        setProfile(insertedProfile as Partner);
+    }
+    setLoading(false);
+  };
 
   const handleLogout = async () => {
     if (!supabase) return;
@@ -223,43 +277,47 @@ const App: React.FC = () => {
       console.error('Error logging out:', error);
       setConnectionError("Failed to log out. Please check your connection.");
     }
-    // State updates will be handled by onAuthStateChange, which sets session to null
-    // and triggers the profile useEffect to clear the profile.
+    // Auth listener will handle state cleanup
     setLoading(false);
   };
 
-  if (!isSupabaseConfigured || !isGoogleMapsConfigured) {
-    return <ConfigurationError />;
+  const clearPublicView = () => {
+    setPublicProfileId(null);
+    setProfile(null);
+    window.history.pushState({}, '', window.location.pathname); // Clear URL param
+  };
+
+  if (!isSupabaseConfigured || !isGoogleMapsConfigured) return <ConfigurationError />;
+  if (connectionError) return <ConnectionError message={connectionError} onRetry={checkInitialState} />
+  if (loading) return <LoadingScreen />;
+
+  // Public Profile View takes priority
+  if (publicProfileId && profile) {
+    return <PublicProfileView profile={profile} onClose={clearPublicView} isPublicView />;
   }
   
-  if (connectionError) {
-    return <ConnectionError message={connectionError} onRetry={checkSession} />
-  }
-
-  if (loading) {
-    return (
-        <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center text-white">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-orange-500"></div>
-        </div>
-    );
-  }
-
-  // A profile is required to enter the dashboard
-  if (!session || !profile) {
+  if (!session) return <AuthScreen supabase={supabase} />;
+  
+  if (needsProfileSetup) {
     return (
         <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
             <div className="w-full h-screen">
-                <Auth supabase={supabase} />
+                <SelectionScreen onSelect={handleCreateProfile} />
             </div>
         </div>
     );
   }
 
-  return (
-    <div className="bg-black min-h-screen font-['Inter',_sans-serif]">
-      <ProfileDashboard profile={profile} onLogout={handleLogout} supabase={supabase} />
-    </div>
-  );
+  if (profile) {
+    return (
+      <div className="bg-black min-h-screen font-['Inter',_sans-serif]">
+        <ProfileDashboard profile={profile} onLogout={handleLogout} supabase={supabase} />
+      </div>
+    );
+  }
+
+  // Fallback loading screen if session exists but profile is still being processed
+  return <LoadingScreen />;
 };
 
 export default App;

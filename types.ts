@@ -1,4 +1,5 @@
 
+
 // FIX: Added 'Place' to the SubType enum to allow for different types of partners, resolving an error in the SelectionScreen component.
 export enum SubType {
   HomeService = 'home_service',
@@ -30,12 +31,19 @@ interface BasePartner {
   bio: string;
   massage_types: string[];
   prices: Price[];
+  booked_dates?: string[];
+  gallery_image_urls?: string[];
 }
 
 export interface HomeServicePartner extends BasePartner {
   sub_type: SubType.HomeService;
   years_of_experience?: number;
   id_card_image_url?: string;
+  is_verified?: boolean;
 }
 
-export type Partner = HomeServicePartner;
+export interface PlacePartner extends BasePartner {
+    sub_type: SubType.Place;
+}
+
+export type Partner = HomeServicePartner | PlacePartner;
