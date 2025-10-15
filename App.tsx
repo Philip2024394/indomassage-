@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import ProfileDashboard from './components/ProfileDashboard';
-import { SubType, Partner } from './types';
+import { SubType, Partner, HomeServicePartner } from './types';
 import { initialFormData } from './components/ProfileForm';
 import SelectionScreen from './components/SelectionScreen';
 import PublicProfileView from './components/PublicProfileView';
@@ -215,6 +215,13 @@ const App: React.FC = () => {
         sub_type: subType,
         header_image_url: headerImageUrl,
     };
+
+    // FIX: Explicitly set default values for columns that might be NOT NULL in the database
+    // to prevent insertion errors, especially for new user profiles.
+    if (subType === SubType.HomeService) {
+        (newProfileData as HomeServicePartner).is_verified = false;
+        (newProfileData as HomeServicePartner).years_of_experience = 0;
+    }
 
     const { data: insertedProfile, error: profileError } = await supabase
         .from('profiles')
