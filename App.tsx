@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import ProfileDashboard from './components/ProfileDashboard';
@@ -6,25 +7,13 @@ import { SubType, Partner, HomeServicePartner } from './types';
 import { initialFormData } from './components/ProfileForm';
 import SelectionScreen from './components/SelectionScreen';
 import PublicProfileView from './components/PublicProfileView';
+import { supabase, GOOGLE_MAPS_API_KEY } from './components/ConfigurationSetup';
 
 // @ts-ignore
 const { createClient } = window.supabase;
 
 // --- CONFIGURATION ---
-// Hardcoded Supabase credentials to resolve environment variable issues.
-const SUPABASE_URL = 'https://lqkfxdqzddtjuwfhjybc.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxa2Z4ZHF6ZGR0anV3ZmhqeWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTQ5NTksImV4cCI6MjA3NDc5MDk1OX0.pG9p3NsUNZBoknq5r5MS5bWg4Zg5ZP5KbZDmHKSItb8';
-
-// IMPORTANT SECURITY WARNING: This key is publicly visible in your app's code.
-// You MUST restrict it in your Google Cloud Console to prevent unauthorized use and potential charges.
-// 1. Go to: https://console.cloud.google.com/apis/credentials
-// 2. Find this API key and click "Edit".
-// 3. Under "Application restrictions", select "Websites" and add your website's URL.
-// 4. Under "API restrictions", select "Restrict key" and choose: Maps JavaScript API, Places API, and Geocoding API.
-const GOOGLE_MAPS_API_KEY = 'AIzaSyCxqJxKLJapoRePJ8xz1wK2sqBUOdd7O2c';
-
-// Create the Supabase client once. It is now a constant.
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Configuration has been moved to components/ConfigurationSetup.tsx for security.
 
 // A predefined list of high-quality header images for new Home Service therapists.
 // The system will cycle through this list for each new sign-up.
