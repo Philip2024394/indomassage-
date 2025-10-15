@@ -288,10 +288,17 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
     };
 
     try {
+        // FIX: Reliably get the current user's ID to prevent RLS policy violations.
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            throw new Error("User not authenticated. Please log in again.");
+        }
+        const userId = user.id;
+
         // Upload profile picture if a new one was selected
         if (profileImageFile) {
             const fileExt = profileImageFile.name.split('.').pop();
-            const filePath = `${profile.user_id}/avatar.${fileExt}`;
+            const filePath = `${userId}/avatar.${fileExt}`;
             const publicUrl = await uploadImage(profileImageFile, filePath);
             if (publicUrl) {
                 updatesToSave.image_url = publicUrl;
@@ -303,7 +310,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
         // Upload ID card if a new one was selected
         if (idCardImageFile && isHomeService) {
             const fileExt = idCardImageFile.name.split('.').pop();
-            const filePath = `${profile.user_id}/id_card.${fileExt}`;
+            const filePath = `${userId}/id_card.${fileExt}`;
             const publicUrl = await uploadImage(idCardImageFile, filePath);
             if (publicUrl) {
                 (updatesToSave as HomeServicePartner).id_card_image_url = publicUrl;
@@ -318,7 +325,7 @@ const ProfileForm: React.FC<ProfileFormProps> = ({ profile, onSave, onBack, supa
             for (const file of galleryImageFiles) {
                 // Create a unique filename for each gallery image
                 const fileName = `gallery_${Date.now()}_${Math.floor(Math.random() * 1000)}.${file.name.split('.').pop()}`;
-                const filePath = `${profile.user_id}/${fileName}`;
+                const filePath = `${userId}/${fileName}`;
                 const publicUrl = await uploadImage(file, filePath);
                 if (publicUrl) {
                     newImageUrls.push(publicUrl);
