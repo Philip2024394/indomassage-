@@ -11,6 +11,12 @@ import ConfigurationSetup from './components/ConfigurationSetup';
 // @ts-ignore
 const { createClient } = window.supabase;
 
+// --- CONFIGURATION ---
+// Hardcoded Supabase credentials to resolve environment variable issues.
+const SUPABASE_URL = 'https://lqkfxdqzddtjuwfhjybc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxxa2Z4ZHF6ZGR0anV3ZmhqeWJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTQ5NTksImV4cCI6MjA3NDc5MDk1OX0.pG9p3NsUNZBoknq5r5MS5bWg4Zg5ZP5KbZDmHKSItb8';
+
+
 // --- TYPES ---
 interface AppConfig {
   supabaseUrl: string;
@@ -82,44 +88,70 @@ const App: React.FC = () => {
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   const [publicProfileId, setPublicProfileId] = useState<string | null>(null);
 
-  const handleConfiguration = (appConfig: AppConfig) => {
-    localStorage.setItem('app_config', JSON.stringify(appConfig));
-    setConfig(appConfig);
-    setSupabase(createClient(appConfig.supabaseUrl, appConfig.supabaseKey));
+  const handleConfiguration = (gmapsConfig: { googleMapsKey: string }) => {
+    // These are guaranteed to exist because they are hardcoded.
+    const supabaseUrl = SUPABASE_URL;
+    const supabaseKey = SUPABASE_ANON_KEY;
+
+    const fullConfig: AppConfig = {
+      supabaseUrl,
+      supabaseKey,
+      googleMapsKey: gmapsConfig.googleMapsKey,
+    };
+    
+    localStorage.setItem('app_config', JSON.stringify(fullConfig));
+    setConfig(fullConfig);
+    setSupabase(createClient(fullConfig.supabaseUrl, fullConfig.supabaseKey));
     setLoading(true); // Start loading app data
   };
 
   useEffect(() => {
     // This effect runs once to determine the configuration.
-    const envConfig = {
-      supabaseUrl: process.env.VITE_SUPABASE_URL,
-      supabaseKey: process.env.VITE_SUPABASE_ANON_KEY,
-      googleMapsKey: process.env.VITE_GOOGLE_MAPS_API_KEY,
-    };
+    const supabaseUrl = SUPABASE_URL;
+    const supabaseKey = SUPABASE_ANON_KEY;
+    const googleMapsKeyEnv = (process as any).env?.VITE_GOOGLE_MAPS_API_KEY; // This can still be used as an override
 
-    if (envConfig.supabaseUrl && envConfig.supabaseKey && envConfig.googleMapsKey) {
-      console.log("Configuration loaded from environment variables.");
-      const initialConfig = envConfig as AppConfig;
-      setConfig(initialConfig);
-      setSupabase(createClient(initialConfig.supabaseUrl, initialConfig.supabaseKey));
-      return;
-    }
-
-    try {
-      const localConfigStr = localStorage.getItem('app_config');
-      if (localConfigStr) {
-        console.log("Configuration loaded from local storage.");
-        const localConfig = JSON.parse(localConfigStr);
-        setConfig(localConfig);
-        setSupabase(createClient(localConfig.supabaseUrl, localConfig.supabaseKey));
+    // Supabase keys are now hardcoded and always present.
+    if (!supabaseUrl || !supabaseKey) {
+        // This block should theoretically never be reached.
+        console.error("CRITICAL: Supabase URL or Key is missing from the source code.");
+        setLoading(false); 
         return;
-      }
-    } catch (e) {
-      console.error("Failed to parse local config, clearing.", e);
-      localStorage.removeItem('app_config');
     }
 
-    // No config found, stop loading to show the setup screen.
+    // Case 1: All keys are available (Supabase hardcoded + GMaps in env).
+    if (googleMapsKeyEnv) {
+        console.log("Configuration loaded from hardcoded values and environment variables.");
+        const initialConfig: AppConfig = { supabaseUrl, supabaseKey, googleMapsKey: googleMapsKeyEnv };
+        setConfig(initialConfig);
+        setSupabase(createClient(initialConfig.supabaseUrl, initialConfig.supabaseKey));
+        return;
+    }
+    
+    // Case 2: Google Maps key might be in local storage.
+    try {
+        const localConfigStr = localStorage.getItem('app_config');
+        if (localConfigStr) {
+            const localConfig = JSON.parse(localConfigStr);
+            if (localConfig.googleMapsKey) {
+                console.log("Configuration loaded from local storage.");
+                // Use hardcoded Supabase keys with the stored maps key.
+                const fullConfig: AppConfig = {
+                    supabaseUrl,
+                    supabaseKey,
+                    googleMapsKey: localConfig.googleMapsKey,
+                };
+                setConfig(fullConfig);
+                setSupabase(createClient(fullConfig.supabaseUrl, fullConfig.supabaseKey));
+                return;
+            }
+        }
+    } catch (e) {
+        console.error("Failed to parse local config, clearing.", e);
+        localStorage.removeItem('app_config');
+    }
+
+    // Case 3: Google Maps key is missing, need to ask the user via the setup screen.
     setLoading(false);
   }, []);
   

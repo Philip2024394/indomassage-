@@ -1,4 +1,4 @@
-
+// FIX: Removed the reference to 'vite/client' types, which was causing a compilation error because the type definition file could not be found.
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';

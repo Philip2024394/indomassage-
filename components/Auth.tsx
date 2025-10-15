@@ -9,6 +9,7 @@ interface AuthProps {
 const Auth: React.FC<AuthProps> = ({ supabase }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +50,10 @@ const Auth: React.FC<AuthProps> = ({ supabase }) => {
     setLoading(false);
   };
 
+  const togglePasswordVisibility = () => {
+    setIsPasswordVisible(prevState => !prevState);
+  };
+
   return (
     <div
       className="flex-1 flex flex-col justify-center items-center p-6 h-full relative bg-cover bg-center"
@@ -86,11 +91,12 @@ const Auth: React.FC<AuthProps> = ({ supabase }) => {
             <Input 
                 label="Password"
                 id="password" 
-                type="password"
+                type={isPasswordVisible ? 'text' : 'password'}
                 placeholder="••••••••" 
                 required 
                 value={password} 
                 onChange={e => setPassword(e.target.value)}
+                onToggleVisibility={togglePasswordVisibility}
             />
 
             <Button type="submit" fullWidth disabled={loading}>
