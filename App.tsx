@@ -6,27 +6,17 @@ import { SubType, Partner } from './types';
 import { initialFormData } from './components/ProfileForm';
 import SelectionScreen from './components/SelectionScreen';
 import PublicProfileView from './components/PublicProfileView';
-
-// Extend the Window interface to include our global API key for TypeScript
-declare global {
-  interface Window {
-    GOOGLE_MAPS_API_KEY: string;
-  }
-}
+import ConfigurationSetup from './components/ConfigurationSetup';
 
 // @ts-ignore
 const { createClient } = window.supabase;
 
-// --- CONFIGURATION ---
-// IMPORTANT: Replace with your Supabase Project URL and Anon Key
-// FIX: Explicitly type constants as string to prevent TypeScript from inferring them
-// as literal types, which causes comparison errors.
-const SUPABASE_URL: string = 'https://ovfhgfzdlwgjtzsfsgzf.supabase.co';
-const SUPABASE_ANON_KEY: string = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92ZmhnZnpkbHdnanR6c2ZzZ3pmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk2Nzc4NTQsImV4cCI6MjA3NTI1Mzg1NH0.NWUYp9AkyzNiqC5oYUG59pOGzxJGvMbz8Bzu96e8qOI';
-const GOOGLE_MAPS_API_KEY = window.GOOGLE_MAPS_API_KEY;
-
-const isSupabaseConfigured = SUPABASE_URL !== 'YOUR_SUPABASE_URL' && SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY';
-const isGoogleMapsConfigured = GOOGLE_MAPS_API_KEY && GOOGLE_MAPS_API_KEY !== 'YOUR_GOOGLE_MAPS_API_KEY';
+// --- TYPES ---
+interface AppConfig {
+  supabaseUrl: string;
+  supabaseKey: string;
+  googleMapsKey: string;
+}
 
 // A predefined list of high-quality header images for new Home Service therapists.
 // The system will cycle through this list for each new sign-up.
@@ -49,10 +39,6 @@ const HOME_SERVICE_HEADER_IMAGES = [
   'https://ik.imagekit.io/7grri5v7d/massage%20image%2016.png?updatedAt=1760187700624',
 ];
 
-
-// Initialize Supabase client ONLY if configured
-const supabase = isSupabaseConfigured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
-
 // --- Helper Components ---
 const LoadingScreen: React.FC = () => (
     <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center text-white">
@@ -64,36 +50,6 @@ const AuthScreen: React.FC<{ supabase: any }> = ({ supabase }) => (
      <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center">
         <div className="w-full h-screen">
             <Auth supabase={supabase} />
-        </div>
-    </div>
-);
-
-// --- Configuration Error Component ---
-const ConfigurationError: React.FC = () => (
-    <div className="bg-black min-h-screen font-['Inter',_sans-serif] flex items-center justify-center text-white p-8">
-        <div className="text-center bg-gray-900 p-8 rounded-2xl border border-red-500/50 max-w-lg w-full shadow-lg">
-            <h1 className="text-2xl font-bold text-red-400 mb-4">Configuration Required</h1>
-            <p className="text-slate-300 mb-6">
-                This application requires API keys to function. Please configure the following credentials:
-            </p>
-            <ul className="text-left space-y-4">
-                {!isSupabaseConfigured && (
-                    <li className="p-4 bg-gray-800/50 border border-gray-700 rounded-lg">
-                        <p className="font-semibold text-slate-200">Supabase Credentials</p>
-                        <p className="text-sm text-slate-400 mt-1">
-                            Open <code>App.tsx</code> and replace the placeholder values for <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code>.
-                        </p>
-                    </li>
-                )}
-                {!isGoogleMapsConfigured && (
-                    <li className="p-4 bg-gray-800/50 border border-gray-700 rounded-lg">
-                        <p className="font-semibold text-slate-200">Google Maps API Key</p>
-                        <p className="text-sm text-slate-400 mt-1">
-                            Open <code>index.html</code> and replace the placeholder value for <code>GOOGLE_MAPS_API_KEY</code>.
-                        </p>
-                    </li>
-                )}
-            </ul>
         </div>
     </div>
 );
@@ -117,6 +73,8 @@ const ConnectionError: React.FC<{ message: string; onRetry: () => void; }> = ({ 
 
 // --- Main App Component ---
 const App: React.FC = () => {
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [supabase, setSupabase] = useState<any | null>(null);
   const [session, setSession] = useState<any>(null);
   const [profile, setProfile] = useState<Partner | null>(null);
   const [loading, setLoading] = useState(true);
@@ -124,44 +82,92 @@ const App: React.FC = () => {
   const [needsProfileSetup, setNeedsProfileSetup] = useState(false);
   const [publicProfileId, setPublicProfileId] = useState<string | null>(null);
 
-  const checkInitialState = async () => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-    
-    // Check for public profile URL first
-    const urlParams = new URLSearchParams(window.location.search);
-    const profileId = urlParams.get('profile');
-
-    if (profileId) {
-      setPublicProfileId(profileId);
-    } else {
-      // Proceed with normal session check
-      setConnectionError(null);
-      setLoading(true);
-
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-          console.error("Supabase connection error:", error);
-          setConnectionError("Failed to connect to the database. Please check your internet connection and try again.");
-      } else {
-          setSession(session);
-      }
-      setLoading(false);
-    }
+  const handleConfiguration = (appConfig: AppConfig) => {
+    localStorage.setItem('app_config', JSON.stringify(appConfig));
+    setConfig(appConfig);
+    setSupabase(createClient(appConfig.supabaseUrl, appConfig.supabaseKey));
+    setLoading(true); // Start loading app data
   };
 
   useEffect(() => {
-    checkInitialState();
+    // This effect runs once to determine the configuration.
+    const envConfig = {
+      supabaseUrl: process.env.VITE_SUPABASE_URL,
+      supabaseKey: process.env.VITE_SUPABASE_ANON_KEY,
+      googleMapsKey: process.env.VITE_GOOGLE_MAPS_API_KEY,
+    };
 
+    if (envConfig.supabaseUrl && envConfig.supabaseKey && envConfig.googleMapsKey) {
+      console.log("Configuration loaded from environment variables.");
+      const initialConfig = envConfig as AppConfig;
+      setConfig(initialConfig);
+      setSupabase(createClient(initialConfig.supabaseUrl, initialConfig.supabaseKey));
+      return;
+    }
+
+    try {
+      const localConfigStr = localStorage.getItem('app_config');
+      if (localConfigStr) {
+        console.log("Configuration loaded from local storage.");
+        const localConfig = JSON.parse(localConfigStr);
+        setConfig(localConfig);
+        setSupabase(createClient(localConfig.supabaseUrl, localConfig.supabaseKey));
+        return;
+      }
+    } catch (e) {
+      console.error("Failed to parse local config, clearing.", e);
+      localStorage.removeItem('app_config');
+    }
+
+    // No config found, stop loading to show the setup screen.
+    setLoading(false);
+  }, []);
+  
+  const initializeApp = async () => {
+      if (!supabase) return;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const profileId = urlParams.get('profile');
+
+      if (profileId) {
+          setPublicProfileId(profileId);
+      } else {
+          setConnectionError(null);
+          setLoading(true);
+
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          if (error) {
+              console.error("Supabase connection error:", error);
+              setConnectionError("Failed to connect to the database. Please check your internet connection and try again.");
+          } else {
+              setSession(session);
+          }
+      }
+      // Loading state will be handled by profile fetching
+  };
+
+  useEffect(() => {
+    // Load the Google Maps script once config is available
+    if (config?.googleMapsKey) {
+      const scriptId = 'google-maps-script';
+      if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${config.googleMapsKey}&libraries=places`;
+        script.async = true;
+        document.head.appendChild(script);
+      }
+    }
+
+    // Initialize the app and set up auth listeners once the supabase client is ready.
     if (supabase) {
+        initializeApp();
+
         const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-            // Reset state only on auth change, not on initial load
             setProfile(null);
             setNeedsProfileSetup(false);
-            setPublicProfileId(null); // Clear public view on login/logout
+            setPublicProfileId(null);
             setSession(session);
         });
 
@@ -169,13 +175,12 @@ const App: React.FC = () => {
             authListener?.subscription.unsubscribe();
         };
     }
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     if (!supabase) return;
     
     const fetchProfile = async () => {
-      // Fetch for logged-in user
       if (session?.user && !publicProfileId) {
         setLoading(true);
         const { data, error } = await supabase
@@ -185,7 +190,6 @@ const App: React.FC = () => {
           .single();
 
         if (error && error.code === 'PGRST116') {
-            console.log('No profile found, showing setup screen.');
             setNeedsProfileSetup(true);
         } else if (error) { 
             console.error('Error fetching profile:', error);
@@ -198,7 +202,6 @@ const App: React.FC = () => {
     };
     
     const fetchPublicProfile = async () => {
-        // Fetch for public view
         if (publicProfileId) {
             setLoading(true);
             const { data, error } = await supabase
@@ -219,10 +222,13 @@ const App: React.FC = () => {
 
     if (publicProfileId) {
       fetchPublicProfile();
-    } else {
+    } else if (session) {
       fetchProfile();
+    } else {
+        // No session and not a public view, so we are done loading.
+        setLoading(false);
     }
-  }, [session, publicProfileId]);
+  }, [session, publicProfileId, supabase]);
   
   const handleCreateProfile = async (subType: SubType) => {
     if (!supabase || !session?.user) return;
@@ -242,7 +248,6 @@ const App: React.FC = () => {
         }
         headerImageUrl = HOME_SERVICE_HEADER_IMAGES[nextImageIndex];
     } else {
-        // Use a generic image for Massage Places
         headerImageUrl = 'https://ik.imagekit.io/7grri5v7d/massage%20image%201.png?updatedAt=1760186885261';
     }
     
@@ -250,7 +255,7 @@ const App: React.FC = () => {
         ...initialFormData(),
         user_id: session.user.id,
         name: subType === SubType.HomeService ? 'New Therapist' : 'New Massage Place',
-        sub_type: subType, // Set the selected sub_type
+        sub_type: subType,
         header_image_url: headerImageUrl,
     };
 
@@ -277,21 +282,19 @@ const App: React.FC = () => {
       console.error('Error logging out:', error);
       setConnectionError("Failed to log out. Please check your connection.");
     }
-    // Auth listener will handle state cleanup
     setLoading(false);
   };
 
   const clearPublicView = () => {
     setPublicProfileId(null);
     setProfile(null);
-    window.history.pushState({}, '', window.location.pathname); // Clear URL param
+    window.history.pushState({}, '', window.location.pathname);
   };
 
-  if (!isSupabaseConfigured || !isGoogleMapsConfigured) return <ConfigurationError />;
-  if (connectionError) return <ConnectionError message={connectionError} onRetry={checkInitialState} />
   if (loading) return <LoadingScreen />;
+  if (!config || !supabase) return <ConfigurationSetup onConfigured={handleConfiguration} />;
+  if (connectionError) return <ConnectionError message={connectionError} onRetry={initializeApp} />
 
-  // Public Profile View takes priority
   if (publicProfileId && profile) {
     return <PublicProfileView profile={profile} onClose={clearPublicView} isPublicView />;
   }
@@ -316,7 +319,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Fallback loading screen if session exists but profile is still being processed
   return <LoadingScreen />;
 };
 
